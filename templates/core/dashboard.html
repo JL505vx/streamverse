@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Mi espacio | StreamVerse{% endblock %}
+{% block body_class %}member-page{% endblock %}
+{% block scene_theme %}member{% endblock %}
+{% block scene_kicker %}Member Lounge{% endblock %}
+{% block scene_title %}Refresco frio, luces tenues y maraton en tu sala{% endblock %}
+{% block content %}
+<section class="dash-header glass profile-hero member-shell">
+  <div class="profile-avatar-wrap">
+    {% if profile.avatar_file %}
+      <img class="avatar" src="{{ profile.avatar_file.url }}" alt="Avatar">
+    {% elif profile.avatar_url %}
+      <img class="avatar" src="{{ profile.avatar_url }}" alt="Avatar">
+    {% else %}
+      <div class="avatar avatar-fallback">{{ user.username|slice:":1"|upper }}</div>
+    {% endif %}
+  </div>
+  <div>
+    <h1>Hola, {{ profile.display_name|default:user.username }}</h1>
+    <p class="muted">{{ profile.bio|default:"Tu espacio para seguir viendo, guardar favoritos y descubrir que poner en el siguiente maraton." }}</p>
+    <div class="hero-actions">
+      <a class="btn-ghost" href="{% url 'user_settings' %}">Perfil y ajustes</a>
+      <a class="btn-ghost" href="{% url 'home' %}">Explorar catalogo</a>
+    </div>
+  </div>
+  {% if hero_recommendation %}
+  <a class="member-highlight" href="{% url 'movie_detail' hero_recommendation.slug %}">
+    <span class="eyebrow">Sigue con esto</span>
+    <strong>{{ hero_recommendation.title }}</strong>
+    <small>{{ hero_recommendation.get_content_type_display }} | {{ hero_recommendation.genre.name }} | {{ hero_recommendation.release_year }}</small>
+  </a>
+  {% endif %}
+</section>
+
+<div class="stats member-stats">
+  <article class="stat glass"><h3>{{ total_movies }}</h3><p>Titulos disponibles</p></article>
+  <article class="stat glass"><h3>{{ favorites_count }}</h3><p>En mi lista</p></article>
+  <article class="stat glass"><h3>{{ continue_count }}</h3><p>Seguir viendo</p></article>
+  <article class="stat glass"><h3>{{ new_releases_count }}</h3><p>Nuevas para ti</p></article>
+</div>
+
+<section class="section-head member-section-head">
+  <h2>Seguir viendo</h2>
+  <a class="btn-mini" href="{% url 'user_settings' %}">Ver conexiones</a>
+</section>
+<div class="rail poster-rail member-rail">
+  {% for progress in continue_watching %}
+    <a class="poster member-poster" href="{% url 'movie_detail' progress.movie.slug %}">
+      <div class="poster-image" {% if progress.movie.cover_file %}style="background-image:url('{{ progress.movie.cover_file.url }}')"{% elif progress.movie.cover_url %}style="background-image:url('{{ progress.movie.cover_url }}')"{% endif %}></div>
+      <div class="poster-meta">
+        <strong>{{ progress.movie.title }}</strong>
+        <small>{{ progress.progress_seconds }}s guardados</small>
+        <small>{{ progress.last_watched|date:"d/m H:i" }}</small>
+      </div>
+    </a>
+  {% empty %}
+    <article class="glass member-empty-state">
+      <h3>Tu siguiente noche de cine empieza aqui</h3>
+      <p class="muted">En cuanto pauses una pelicula, aparecera en esta fila para volver justo donde te quedaste.</p>
+    </article>
+  {% endfor %}
+</div>
+
+<section class="section-head member-section-head">
+  <h2>Mi lista</h2>
+  <a class="btn-mini" href="{% url 'user_settings' %}">Editar perfil</a>
+</section>
+<div class="rail poster-rail member-rail">
+  {% for fav in favorites %}
+    <a class="poster member-poster" href="{% url 'movie_detail' fav.movie.slug %}">
+      <div class="poster-image" {% if fav.movie.cover_file %}style="background-image:url('{{ fav.movie.cover_file.url }}')"{% elif fav.movie.cover_url %}style="background-image:url('{{ fav.movie.cover_url }}')"{% endif %}></div>
+      <div class="poster-meta">
+        <strong>{{ fav.movie.title }}</strong>
+        <small>{{ fav.movie.get_content_type_display }} | {{ fav.movie.genre.name }}</small>
+      </div>
+    </a>
+  {% empty %}
+    <article class="glass member-empty-state">
+      <h3>Empieza tu lista personal</h3>
+      <p class="muted">Usa el boton <strong>Mi lista</strong> dentro de cualquier pelicula para guardarla aqui.</p>
+    </article>
+  {% endfor %}
+</div>
+
+<section class="section-head member-section-head">
+  <h2>Recien agregadas</h2>
+</section>
+<div class="rail poster-rail member-rail">
+  {% for movie in recent_movies %}
+    <a class="poster member-poster" href="{% url 'movie_detail' movie.slug %}">
+      <div class="poster-image" {% if movie.cover_file %}style="background-image:url('{{ movie.cover_file.url }}')"{% elif movie.cover_url %}style="background-image:url('{{ movie.cover_url }}')"{% endif %}></div>
+      <div class="poster-meta">
+        <strong>{{ movie.title }}</strong>
+        <small>{{ movie.get_content_type_display }} | {{ movie.genre.name }}</small>
+      </div>
+    </a>
+  {% empty %}
+    <p class="muted">No hay contenido por ahora.</p>
+  {% endfor %}
+</div>
+{% endblock %}

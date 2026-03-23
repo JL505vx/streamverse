@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} | StreamVerse{% endblock %}
+{% block body_class %}admin-page{% endblock %}
+{% block scene_theme %}admin{% endblock %}
+{% block scene_kicker %}Studio Desk{% endblock %}
+{% block scene_title %}Sube tu catalogo con una cabina de control mucho mas clara{% endblock %}
+{% block content %}
+<section class="dash-header glass admin-head">
+  <div>
+    <h1>{{ page_title }}</h1>
+    <p class="muted">Carga los datos base aqui y deja archivos/portadas para el paso siguiente si quieres ir rapido.</p>
+  </div>
+  <div class="toolbar-links">
+    <a class="btn-ghost" href="{% url 'admin_movie_bulk_create' %}">Carga rapida</a>
+    <a class="btn-mini" href="{% url 'admin_movies' %}">Volver al catalogo</a>
+  </div>
+</section>
+
+<section class="glass admin-form-shell">
+  <form method="post" enctype="multipart/form-data" class="auth-form">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="form-errors">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    {% if movie %}
+    <section class="glass hint-box upload-notes replace-tip">
+      <p class="muted"><strong>Corrige archivos desde una sola ruta:</strong> si subiste la pelicula equivocada, entra a <a href="{% url 'admin_movie_media' movie.pk %}"><strong>Archivos</strong></a> para reemplazar o quitar la portada/video actual sin tocar la ficha.</p>
+      {% if movie.video_file or movie.cover_file %}
+      <p class="muted">Actual: {% if movie.cover_file %}portada local cargada{% endif %}{% if movie.cover_file and movie.video_file %} | {% endif %}{% if movie.video_file %}video local cargado{% endif %}</p>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    <div class="admin-form-grid">
+      <section class="form-card">
+        <h3>Ficha principal</h3>
+        <label for="{{ form.title.id_for_label }}">Titulo</label>
+        {{ form.title }}
+        {{ form.title.errors }}
+
+        <label for="{{ form.content_type.id_for_label }}">Tipo</label>
+        {{ form.content_type }}
+        {{ form.content_type.errors }}
+
+        <label for="{{ form.genre.id_for_label }}">Genero</label>
+        {{ form.genre }}
+        {{ form.genre.errors }}
+
+        <label for="{{ form.release_year.id_for_label }}">Ano</label>
+        {{ form.release_year }}
+        {{ form.release_year.errors }}
+
+        <label for="{{ form.synopsis.id_for_label }}">Sinopsis</label>
+        {{ form.synopsis }}
+        {{ form.synopsis.errors }}
+      </section>
+
+      <section class="form-card">
+        <h3>Portada y video</h3>
+        <label for="{{ form.cover_url.id_for_label }}">Portada por URL</label>
+        {{ form.cover_url }}
+        {{ form.cover_url.errors }}
+
+        <label for="{{ form.cover_file.id_for_label }}">Portada local</label>
+        {{ form.cover_file }}
+        {{ form.cover_file.errors }}
+        {% if form.cover_file.help_text %}<small class="field-help">{{ form.cover_file.help_text }}</small>{% endif %}
+        {% if movie and movie.cover_file %}<small class="field-help">Actual: {{ movie.cover_file.name }}</small>{% endif %}
+
+        <label for="{{ form.video_url.id_for_label }}">Video por URL</label>
+        {{ form.video_url }}
+        {{ form.video_url.errors }}
+
+        <label for="{{ form.video_file.id_for_label }}">Video local</label>
+        {{ form.video_file }}
+        {{ form.video_file.errors }}
+        {% if form.video_file.help_text %}<small class="field-help">{{ form.video_file.help_text }}</small>{% endif %}
+        {% if movie and movie.video_file %}<small class="field-help">Actual: {{ movie.video_file.name }}</small>{% endif %}
+
+        <label class="inline-check" for="{{ form.is_published.id_for_label }}">{{ form.is_published }} Publicar de inmediato</label>
+        {{ form.is_published.errors }}
+      </section>
+    </div>
+
+    {% if form.errors %}
+      <div class="form-errors">Revise los campos marcados. Ahora ya te muestro exactamente donde esta el problema.</div>
+    {% endif %}
+
+    <section class="glass hint-box upload-notes">
+      <p class="muted">Tip rapido: si hoy solo quieres montar el catalogo, llena titulo, genero, ano y tipo. Los archivos puedes subirlos despues desde <strong>Archivos</strong>.</p>
+      <p class="muted">Si tienes muchas peliculas listas, usa <strong>Carga rapida</strong> para crearlas de una sola vez.</p>
+    </section>
+
+    <div class="hero-actions">
+      <button type="submit" class="btn-primary">Guardar contenido</button>
+      <a class="btn-ghost" href="{% url 'admin_movies' %}">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

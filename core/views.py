@@ -1,0 +1,511 @@
+import mimetypes
+import os
+import re
+from datetime import timedelta
+
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.models import User
+from django.contrib.auth.views import LoginView
+from django.db.models import Count, Max, Q, Sum
+from django.db.models.deletion import ProtectedError
+from django.db.models.functions import Coalesce
+from django.http import FileResponse, Http404, HttpResponse, StreamingHttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
+from django.utils._os import safe_join
+
+from movies.models import Favorite, Genre, Movie, PlaybackProgress, WatchSession
+
+from .forms import (
+    AdminUserCreateForm,
+    AdminUserUpdateForm,
+    BulkCatalogImportForm,
+    GenreAdminForm,
+    MovieAdminForm,
+    MovieMediaForm,
+    UserAccountForm,
+    UserSettingsForm,
+    UserSignupForm,
+)
+from .models import UserProfile
+
+
+admin_required = user_passes_test(lambda u: u.is_authenticated and u.is_staff)
+
+
+class RoleLoginView(LoginView):
+    """Redirect users to their proper area right after login."""
+
+    def get_success_url(self):
+        if self.request.user.is_staff:
+            return reverse('admin_panel')
+        return reverse('user_dashboard')
+
+
+def get_user_profile(user):
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    return profile
+
+
+def signup_view(request):
+    if request.user.is_authenticated:
+        return redirect('user_dashboard')
+
+    if request.method == 'POST':
+        form = UserSignupForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect('login')
+    else:
+        form = UserSignupForm()
+
+    return render(request, 'core/signup.html', {'form': form})
+
+
+@login_required
+def user_dashboard_view(request):
+    profile = get_user_profile(request.user)
+    recent_movies = list(Movie.objects.filter(is_published=True).select_related('genre').order_by('-created_at')[:8])
+
+    favorites = list(Favorite.objects.filter(user=request.user).select_related('movie', 'movie__genre')[:10])
+    continue_watching = list(
+        PlaybackProgress.objects.filter(user=request.user, progress_seconds__gt=0, completed=False)
+        .select_related('movie', 'movie__genre')
+        .order_by('-last_watched')[:10]
+    )
+
+    watch_qs = WatchSession.objects.filter(user=request.user).select_related('movie')
+    recent_sessions = list(watch_qs[:6])
+    total_movies = Movie.objects.filter(is_published=True).count()
+    favorites_count = Favorite.objects.filter(user=request.user).count()
+
+    hero_recommendation = continue_watching[0].movie if continue_watching else (favorites[0].movie if favorites else (recent_movies[0] if recent_movies else None))
+
+    context = {
+        'profile': profile,
+        'recent_movies': recent_movies,
+        'favorites': favorites,
+        'continue_watching': continue_watching,
+        'recent_sessions': recent_sessions,
+        'hero_recommendation': hero_recommendation,
+        'total_movies': total_movies,
+        'favorites_count': favorites_count,
+        'continue_count': len(continue_watching),
+        'new_releases_count': len(recent_movies),
+    }
+    return render(request, 'core/dashboard.html', context)
+
+
+@login_required
+def user_settings_view(request):
+    profile = get_user_profile(request.user)
+    profile_form = UserSettingsForm(request.POST or None, request.FILES or None, instance=profile)
+    account_form = UserAccountForm(request.POST or None, instance=request.user)
+    watch_qs = WatchSession.objects.filter(user=request.user).select_related('movie')
+    devices = list(watch_qs.values('device_type', 'browser', 'operating_system').distinct()[:8])
+    recent_sessions = list(watch_qs[:8])
+
+    if request.method == 'POST' and profile_form.is_valid() and account_form.is_valid():
+        profile_form.save()
+        account_form.save()
+        messages.success(request, 'Ajustes guardados correctamente.')
+        return redirect('user_settings')
+
+    return render(
+        request,
+        'core/settings.html',
+        {
+            'profile': profile,
+            'profile_form': profile_form,
+            'account_form': account_form,
+            'devices': devices,
+            'recent_sessions': recent_sessions,
+        },
+    )
+
+
+@admin_required
+def admin_panel_view(request):
+    active_since = timezone.now() - timedelta(hours=24)
+    watch_qs = WatchSession.objects.select_related('user', 'movie')
+
+    top_content = (
+        Movie.objects.filter(is_published=True)
+        .annotate(total_views=Coalesce(Sum('watch_sessions__views_count'), 0))
+        .order_by('-total_views', '-created_at')[:6]
+    )
+
+    user_activity = (
+        watch_qs.values('user__username')
+        .annotate(
+            total_sessions=Count('id'),
+            total_views=Coalesce(Sum('views_count'), 0),
+            devices=Count('device_type', distinct=True),
+            last_seen=Max('last_seen'),
+        )
+        .order_by('-last_seen')[:6]
+    )
+
+    recent_streams = list(watch_qs[:18])
+    histories_map = {}
+    for session in recent_streams:
+        username = session.user.username
+        if username not in histories_map:
+            histories_map[username] = {
+                'username': username,
+                'total_views': 0,
+                'devices': set(),
+                'last_seen': session.last_seen,
+                'entries': [],
+            }
+        histories_map[username]['total_views'] += session.views_count or 0
+        histories_map[username]['devices'].add(f'{session.device_type} / {session.operating_system}')
+        histories_map[username]['entries'].append(session)
+
+    user_histories = []
+    for item in histories_map.values():
+        item['device_count'] = len(item['devices'])
+        item['devices'] = sorted(item['devices'])
+        user_histories.append(item)
+    user_histories.sort(key=lambda item: item['last_seen'], reverse=True)
+
+    catalog_total = Movie.objects.count()
+    missing_video_total = Movie.objects.filter(Q(video_file='') | Q(video_file__isnull=True), Q(video_url='') | Q(video_url__isnull=True)).count()
+    missing_cover_total = Movie.objects.filter(Q(cover_file='') | Q(cover_file__isnull=True), Q(cover_url='') | Q(cover_url__isnull=True)).count()
+    draft_total = Movie.objects.filter(is_published=False).count()
+    complete_total = max(catalog_total - missing_video_total - missing_cover_total - draft_total, 0)
+
+    def percent(value):
+        if catalog_total <= 0:
+            return 0
+        return round((value / catalog_total) * 100)
+
+    catalog_needs = Movie.objects.select_related('genre').filter(
+        Q(video_file='') | Q(video_file__isnull=True) | Q(cover_file='') | Q(cover_file__isnull=True)
+    ).order_by('-created_at')[:6]
+
+    context = {
+        'movie_count': Movie.objects.filter(content_type=Movie.ContentType.MOVIE).count(),
+        'series_count': Movie.objects.filter(content_type=Movie.ContentType.SERIES).count(),
+        'genre_count': Genre.objects.count(),
+        'user_count': User.objects.count(),
+        'latest_movies': Movie.objects.select_related('genre').order_by('-created_at')[:5],
+        'latest_users': User.objects.order_by('-date_joined')[:5],
+        'active_users_24h': watch_qs.filter(last_seen__gte=active_since).values('user').distinct().count(),
+        'active_devices_24h': watch_qs.filter(last_seen__gte=active_since)
+        .values('device_type', 'browser', 'operating_system')
+        .distinct()
+        .count(),
+        'total_plays': watch_qs.aggregate(total=Sum('views_count'))['total'] or 0,
+        'top_content': top_content,
+        'catalog_total': catalog_total,
+        'missing_video_total': missing_video_total,
+        'missing_cover_total': missing_cover_total,
+        'draft_total': draft_total,
+        'complete_total': complete_total,
+        'complete_percent': percent(complete_total),
+        'missing_video_percent': percent(missing_video_total),
+        'missing_cover_percent': percent(missing_cover_total),
+        'draft_percent': percent(draft_total),
+        'user_activity': user_activity,
+        'user_histories': user_histories[:6],
+        'catalog_needs': catalog_needs,
+    }
+    return render(request, 'core/admin_panel.html', context)
+
+
+@admin_required
+def admin_movie_list_view(request):
+    missing_video_only = request.GET.get('missing_video') == '1'
+    search_query = (request.GET.get('q') or '').strip()
+    movies = Movie.objects.select_related('genre').order_by('-created_at')
+
+    if missing_video_only:
+        movies = movies.filter(
+            (Q(video_file='') | Q(video_file__isnull=True))
+            & (Q(video_url='') | Q(video_url__isnull=True))
+        )
+
+    if search_query:
+        search_filters = Q(title__icontains=search_query) | Q(genre__name__icontains=search_query) | Q(synopsis__icontains=search_query)
+        if search_query.isdigit():
+            search_filters |= Q(release_year=int(search_query))
+        movies = movies.filter(search_filters)
+
+    context = {
+        'movies': movies,
+        'missing_video_only': missing_video_only,
+        'search_query': search_query,
+        'total_count': Movie.objects.count(),
+        'missing_video_count': Movie.objects.filter(Q(video_file='') | Q(video_file__isnull=True), Q(video_url='') | Q(video_url__isnull=True)).count(),
+        'missing_cover_count': Movie.objects.filter(Q(cover_file='') | Q(cover_file__isnull=True), Q(cover_url='') | Q(cover_url__isnull=True)).count(),
+    }
+    return render(request, 'core/admin/movies_list.html', context)
+
+
+@admin_required
+def admin_movie_bulk_create_view(request):
+    form = BulkCatalogImportForm(request.POST or None)
+    preview_lines = [
+        'Que Paso Ayer|2009|Comedia',
+        'Sangre por sangre|1993|Drama',
+        'Tarzan|1999|Animacion',
+        'Como entrenar a tu dragon 2|2014|Animacion',
+    ]
+
+    if request.method == 'POST' and form.is_valid():
+        entries = [line.strip() for line in form.cleaned_data['entries'].splitlines() if line.strip()]
+        default_genre_name = form.cleaned_data['default_genre'].strip() or 'Pendiente'
+        default_year = form.cleaned_data.get('default_release_year')
+        default_type = form.cleaned_data['default_content_type']
+        publish_now = form.cleaned_data['is_published']
+        default_genre, _ = Genre.objects.get_or_create(name=default_genre_name)
+
+        created = 0
+        skipped = 0
+        errors = []
+
+        for index, line in enumerate(entries, start=1):
+            parts = [part.strip() for part in line.split('|')]
+            title = parts[0] if parts else ''
+            year = default_year
+            genre = default_genre
+            content_type = default_type
+
+            if not title:
+                errors.append(f'Linea {index}: falta el titulo.')
+                continue
+
+            if len(parts) >= 2 and parts[1]:
+                if not parts[1].isdigit():
+                    errors.append(f'Linea {index}: el ano debe ser numerico.')
+                    continue
+                year = int(parts[1])
+
+            if len(parts) >= 3 and parts[2]:
+                genre, _ = Genre.objects.get_or_create(name=parts[2])
+
+            if len(parts) >= 4 and parts[3]:
+                if parts[3] not in {Movie.ContentType.MOVIE, Movie.ContentType.SERIES}:
+                    errors.append(f'Linea {index}: el tipo debe ser movie o series.')
+                    continue
+                content_type = parts[3]
+
+            if not year:
+                errors.append(f'Linea {index}: agrega ano o define uno por defecto.')
+                continue
+
+            duplicate_exists = Movie.objects.filter(
+                title__iexact=title,
+                release_year=year,
+                content_type=content_type,
+            ).exists()
+            if duplicate_exists:
+                skipped += 1
+                continue
+
+            Movie.objects.create(
+                title=title,
+                release_year=year,
+                genre=genre,
+                content_type=content_type,
+                is_published=publish_now,
+            )
+            created += 1
+
+        if created:
+            messages.success(request, f'Se crearon {created} contenidos nuevos.')
+        if skipped:
+            messages.warning(request, f'Se omitieron {skipped} duplicados.')
+        for error in errors[:6]:
+            messages.error(request, error)
+
+        if created and not errors:
+            return redirect('admin_movies')
+
+    return render(
+        request,
+        'core/admin/movie_bulk_form.html',
+        {
+            'form': form,
+            'page_title': 'Carga rapida de catalogo',
+            'preview_lines': preview_lines,
+        },
+    )
+
+
+@admin_required
+def admin_movie_create_view(request):
+    form = MovieAdminForm(request.POST or None, request.FILES or None)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Contenido creado correctamente.')
+        return redirect('admin_movies')
+    return render(request, 'core/admin/movie_form.html', {'form': form, 'page_title': 'Nuevo contenido'})
+
+
+@admin_required
+def admin_movie_edit_view(request, pk):
+    movie = get_object_or_404(Movie, pk=pk)
+    form = MovieAdminForm(request.POST or None, request.FILES or None, instance=movie)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Contenido actualizado correctamente.')
+        return redirect('admin_movies')
+    return render(request, 'core/admin/movie_form.html', {'form': form, 'page_title': 'Editar contenido', 'movie': movie})
+
+
+@admin_required
+def admin_movie_media_view(request, pk):
+    movie = get_object_or_404(Movie, pk=pk)
+    form = MovieMediaForm(request.POST or None, request.FILES or None, instance=movie)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Archivos de contenido actualizados correctamente.')
+        return redirect('admin_movies')
+
+    return render(request, 'core/admin/movie_media_form.html', {'form': form, 'movie': movie})
+
+
+@admin_required
+def admin_movie_delete_view(request, pk):
+    movie = get_object_or_404(Movie, pk=pk)
+    if request.method == 'POST':
+        movie.delete()
+        messages.success(request, 'Contenido eliminado.')
+        return redirect('admin_movies')
+    return render(request, 'core/admin/movie_confirm_delete.html', {'movie': movie})
+
+
+@admin_required
+def admin_genre_list_view(request):
+    genres = Genre.objects.order_by('name')
+    return render(request, 'core/admin/genres_list.html', {'genres': genres})
+
+
+@admin_required
+def admin_genre_create_view(request):
+    form = GenreAdminForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Genero creado correctamente.')
+        return redirect('admin_genres')
+    return render(request, 'core/admin/genre_form.html', {'form': form, 'page_title': 'Nuevo genero'})
+
+
+@admin_required
+def admin_genre_edit_view(request, pk):
+    genre = get_object_or_404(Genre, pk=pk)
+    form = GenreAdminForm(request.POST or None, instance=genre)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Genero actualizado correctamente.')
+        return redirect('admin_genres')
+    return render(request, 'core/admin/genre_form.html', {'form': form, 'page_title': 'Editar genero'})
+
+
+@admin_required
+def admin_genre_delete_view(request, pk):
+    genre = get_object_or_404(Genre, pk=pk)
+    if request.method == 'POST':
+        try:
+            genre.delete()
+            messages.success(request, 'Genero eliminado.')
+        except ProtectedError:
+            messages.error(request, 'No se puede eliminar: hay contenidos ligados a este genero.')
+        return redirect('admin_genres')
+    return render(request, 'core/admin/genre_confirm_delete.html', {'genre': genre})
+
+
+@admin_required
+def admin_user_list_view(request):
+    users = User.objects.order_by('-date_joined')
+    return render(request, 'core/admin/users_list.html', {'users': users})
+
+
+@admin_required
+def admin_user_create_view(request):
+    form = AdminUserCreateForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Usuario creado correctamente.')
+        return redirect('admin_users')
+    return render(request, 'core/admin/user_form.html', {'form': form, 'page_title': 'Nuevo usuario'})
+
+
+@admin_required
+def admin_user_edit_view(request, pk):
+    target_user = get_object_or_404(User, pk=pk)
+    form = AdminUserUpdateForm(request.POST or None, instance=target_user)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Usuario actualizado correctamente.')
+        return redirect('admin_users')
+    return render(request, 'core/admin/user_form.html', {'form': form, 'page_title': 'Editar usuario'})
+
+
+def media_stream_view(request, path):
+    """Serve media files with HTTP Range support (required for video seeking)."""
+    try:
+        file_path = safe_join(settings.MEDIA_ROOT, path)
+    except ValueError as exc:
+        raise Http404('Archivo no encontrado') from exc
+
+    if not os.path.isfile(file_path):
+        raise Http404('Archivo no encontrado')
+
+    file_size = os.path.getsize(file_path)
+    content_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+    range_header = request.headers.get('Range', '')
+
+    if not range_header:
+        response = FileResponse(open(file_path, 'rb'), content_type=content_type)
+        response['Accept-Ranges'] = 'bytes'
+        response['Content-Length'] = str(file_size)
+        return response
+
+    match = re.match(r'bytes=(\d*)-(\d*)', range_header)
+    if not match:
+        return HttpResponse(status=416)
+
+    start_str, end_str = match.groups()
+    if start_str == '' and end_str == '':
+        return HttpResponse(status=416)
+
+    if start_str == '':
+        suffix_len = int(end_str)
+        start = max(file_size - suffix_len, 0)
+        end = file_size - 1
+    else:
+        start = int(start_str)
+        end = int(end_str) if end_str else file_size - 1
+
+    if start >= file_size or start > end:
+        return HttpResponse(status=416)
+
+    end = min(end, file_size - 1)
+    remaining = end - start + 1
+    chunk_size = 8192
+    file_handle = open(file_path, 'rb')
+    file_handle.seek(start)
+
+    def file_iterator():
+        try:
+            bytes_left = remaining
+            while bytes_left > 0:
+                chunk = file_handle.read(min(chunk_size, bytes_left))
+                if not chunk:
+                    break
+                bytes_left -= len(chunk)
+                yield chunk
+        finally:
+            file_handle.close()
+
+    response = StreamingHttpResponse(file_iterator(), status=206, content_type=content_type)
+    response['Accept-Ranges'] = 'bytes'
+    response['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+    response['Content-Length'] = str(remaining)
+    return response

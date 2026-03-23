@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ movie.title }} | StreamVerse{% endblock %}
+{% block body_class %}member-page{% endblock %}
+{% block content %}
+<section class="player-layout player-shell">
+  <div class="player-main glass">
+    <h1>{{ movie.title }}</h1>
+    <p class="muted">{{ movie.get_content_type_display }} | {{ movie.genre.name }} | {{ movie.release_year }}</p>
+
+    <div class="hero-actions">
+      <form method="post" action="{% url 'toggle_favorite' movie.slug %}">
+        {% csrf_token %}
+        <button type="submit" class="btn-ghost">{% if is_favorite %}En mi lista{% else %}+ Mi lista{% endif %}</button>
+      </form>
+      {% if resume_seconds > 0 %}
+        <button id="resume-btn" type="button" class="btn-primary">Continuar desde {{ resume_label }}</button>
+      {% endif %}
+    </div>
+
+    <video id="stream-player" class="player" controls controlsList="nodownload noremoteplayback" disablepictureinpicture preload="metadata" oncontextmenu="return false;" {% if movie.cover_file %}poster="{{ movie.cover_file.url }}"{% elif movie.cover_url %}poster="{{ movie.cover_url }}"{% endif %}>
+      {% if movie.video_file %}
+        <source src="{{ movie.video_file.url }}">
+      {% elif movie.video_url %}
+        <source src="{{ movie.video_url }}">
+      {% endif %}
+      Tu navegador no soporta video.
+    </video>
+    <p>{{ movie.synopsis|default:"Sin sinopsis por ahora." }}</p>
+  </div>
+</section>
+
+<section class="glass related-carousel-shell">
+  <div class="section-head member-section-head related-head">
+    <h2>Mas del mismo genero</h2>
+    <p class="muted">Sugerencias listas para deslizar sin salir de la peli.</p>
+  </div>
+  <div class="poster-carousel">
+    {% for item in related_movies %}
+      <a class="poster recommendation-card" href="{% url 'movie_detail' item.slug %}">
+        <div class="recommendation-image" {% if item.cover_file %}style="background-image:url('{{ item.cover_file.url }}')"{% elif item.cover_url %}style="background-image:url('{{ item.cover_url }}')"{% endif %}></div>
+        <div class="poster-meta recommendation-meta">
+          <strong>{{ item.title }}</strong>
+          <small>{{ item.release_year }}</small>
+        </div>
+      </a>
+    {% empty %}
+      <p class="muted">No hay recomendaciones aun.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<script>
+(function () {
+  const player = document.getElementById('stream-player');
+  if (!player) return;
+
+  const progressUrl = "{% url 'update_progress' movie.slug %}";
+  const resumeSeconds = Number("{{ resume_seconds|default:0 }}");
+  const resumeBtn = document.getElementById('resume-btn');
+  let lastSentSecond = -1;
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return '';
+  }
+
+  function sendProgress(force) {
+    if (!player.duration || !isFinite(player.duration)) return;
+    const current = Math.floor(player.currentTime || 0);
+    if (!force && current === lastSentSecond) return;
+    lastSentSecond = current;
+
+    fetch(progressUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify({
+        progress_seconds: current,
+        duration_seconds: Math.floor(player.duration),
+      }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  if (resumeBtn) {
+    resumeBtn.addEventListener('click', function () {
+      const jump = Math.max(0, resumeSeconds - 2);
+      if (jump > 0) {
+        player.currentTime = jump;
+      }
+      player.play().catch(() => {});
+    });
+  }
+
+  player.addEventListener('timeupdate', function () {
+    if (Math.floor(player.currentTime) % 12 === 0) {
+      sendProgress(false);
+    }
+  });
+
+  player.addEventListener('pause', function () { sendProgress(true); });
+  player.addEventListener('ended', function () { sendProgress(true); });
+  window.addEventListener('beforeunload', function () { sendProgress(true); });
+})();
+</script>
+{% endblock %}

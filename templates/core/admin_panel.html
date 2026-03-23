@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Panel Admin | StreamVerse{% endblock %}
+{% block body_class %}admin-page{% endblock %}
+{% block scene_theme %}admin{% endblock %}
+{% block scene_kicker %}Control Booth{% endblock %}
+{% block scene_title %}Clapperboard, neon y snacks listos para dirigir la funcion{% endblock %}
+{% block content %}
+<section class="dash-header glass admin-hero-shell admin-hero-spotlight">
+  <div class="admin-hero-copy">
+    <p class="eyebrow">CENTRO DE OPERACIONES</p>
+    <h1>Panel de control de {{ user.username }}</h1>
+    <p class="muted">Administra catalogo, usuarios, actividad y pendientes sin perder tiempo cambiando entre pantallas.</p>
+  </div>
+  <div class="admin-hero-actions">
+    <a href="{% url 'admin_movie_create' %}" class="btn-primary">Nuevo contenido</a>
+    <a href="{% url 'admin_movie_bulk_create' %}" class="btn-ghost">Carga rapida</a>
+  </div>
+</section>
+
+<div class="stats admin-stats-grid">
+  <article class="stat glass"><h3>{{ movie_count }}</h3><p>Peliculas</p></article>
+  <article class="stat glass"><h3>{{ series_count }}</h3><p>Series</p></article>
+  <article class="stat glass"><h3>{{ active_users_24h }}</h3><p>Usuarios activos (24h)</p></article>
+  <article class="stat glass"><h3>{{ active_devices_24h }}</h3><p>Dispositivos activos (24h)</p></article>
+</div>
+
+<section class="quick-links glass admin-command-center">
+  <div class="admin-section-head">
+    <div>
+      <h2>Centro rapido</h2>
+      <p class="muted">Flujos pensados para subir, completar y ordenar el catalogo mas rapido.</p>
+    </div>
+    <div class="admin-badge-strip">
+      <span class="chip">{{ total_plays }} reproducciones</span>
+      <span class="chip">{{ genre_count }} generos</span>
+      <span class="chip">{{ user_count }} usuarios</span>
+    </div>
+  </div>
+  <div class="quick-grid admin-quick-grid">
+    <a href="{% url 'admin_movie_create' %}" class="quick-item quick-item-strong">+ Cargar pelicula o serie</a>
+    <a href="{% url 'admin_movie_bulk_create' %}" class="quick-item">Carga rapida por lista</a>
+    <a href="{% url 'admin_movies' %}?missing_video=1" class="quick-item">Completar videos pendientes</a>
+    <a href="{% url 'admin_movies' %}" class="quick-item">Catalogo completo</a>
+    <a href="{% url 'admin_genres' %}" class="quick-item">Clasificar generos</a>
+    <a href="{% url 'admin_users' %}" class="quick-item">Gestionar usuarios</a>
+  </div>
+</section>
+
+<section class="panel-grid admin-overview-grid">
+  <article class="glass panel-box catalog-health-box">
+    <div class="admin-section-head compact-head">
+      <div>
+        <h3>Salud del catalogo</h3>
+        <p class="muted">Que tan completa esta la biblioteca y que necesita atencion inmediata.</p>
+      </div>
+    </div>
+    <div class="catalog-health-summary">
+      <div class="catalog-score-card">
+        <strong>{{ complete_percent }}%</strong>
+        <span>catalogo listo</span>
+      </div>
+      <div class="catalog-meters">
+        <div class="meter-row meter-good">
+          <div class="meter-label"><span>Completas</span><strong>{{ complete_total }}</strong></div>
+          <div class="meter-track"><div class="meter-fill" style="width: {{ complete_percent }}%"></div></div>
+        </div>
+        <div class="meter-row meter-alert">
+          <div class="meter-label"><span>Sin video</span><strong>{{ missing_video_total }}</strong></div>
+          <div class="meter-track"><div class="meter-fill" style="width: {{ missing_video_percent }}%"></div></div>
+        </div>
+        <div class="meter-row meter-warn">
+          <div class="meter-label"><span>Sin portada</span><strong>{{ missing_cover_total }}</strong></div>
+          <div class="meter-track"><div class="meter-fill" style="width: {{ missing_cover_percent }}%"></div></div>
+        </div>
+        <div class="meter-row meter-neutral">
+          <div class="meter-label"><span>Borradores</span><strong>{{ draft_total }}</strong></div>
+          <div class="meter-track"><div class="meter-fill" style="width: {{ draft_percent }}%"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="list-compact tight-list">
+      {% for movie in catalog_needs %}
+        <a class="compact-item compact-link" href="{% url 'admin_movie_edit' movie.pk %}">
+          <span>{{ movie.title }}</span>
+          <small>{% if not movie.video_file and not movie.video_url %}Falta video{% endif %}{% if not movie.video_file and not movie.video_url and not movie.cover_file and not movie.cover_url %} | {% endif %}{% if not movie.cover_file and not movie.cover_url %}Falta portada{% endif %}</small>
+        </a>
+      {% empty %}
+        <p class="muted">Todo el catalogo tiene al menos video o portada.</p>
+      {% endfor %}
+    </div>
+  </article>
+
+  <article class="glass panel-box user-activity-box">
+    <div class="admin-section-head compact-head">
+      <div>
+        <h3>Usuarios y actividad</h3>
+        <p class="muted">Que ha hecho cada usuario recientemente y desde cuantos dispositivos entra.</p>
+      </div>
+    </div>
+    <div class="activity-user-grid">
+      {% for item in user_activity %}
+        <div class="device-chip admin-user-chip">
+          <strong>{{ item.user__username }}</strong>
+          <small>{{ item.total_views }} vistas | {{ item.total_sessions }} sesiones | {{ item.devices }} dispositivos</small>
+          <small>Ultima actividad: {{ item.last_seen|date:"d/m H:i" }}</small>
+        </div>
+      {% empty %}
+        <p class="muted">Todavia no hay actividad para resumir por usuario.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+
+<section class="section-head top10-head admin-ranking-head">
+  <h2>Top reproducidas</h2>
+  <p class="muted">Tus titulos fuertes del momento, utiles para detectar sagas, favoritos y contenido que merece mejor portada.</p>
+</section>
+<div class="rail admin-top-rail">
+  {% for movie in top_content %}
+    <a class="poster ranked" href="{% url 'admin_movie_edit' movie.pk %}">
+      <span class="rank-badge">#{{ forloop.counter }}</span>
+      {% if movie.cover_file %}
+        <div class="poster-image" style="background-image:url('{{ movie.cover_file.url }}')"></div>
+      {% elif movie.cover_url %}
+        <div class="poster-image" style="background-image:url('{{ movie.cover_url }}')"></div>
+      {% else %}
+        <div class="poster-image"></div>
+      {% endif %}
+      <div class="poster-meta">
+        <strong>{{ movie.title }}</strong>
+        <small>{{ movie.total_views }} reproducciones</small>
+      </div>
+    </a>
+  {% empty %}
+    <p class="muted">No hay datos de reproduccion aun.</p>
+  {% endfor %}
+</div>
+
+<section class="panel-grid admin-activity-grid">
+  <article class="glass panel-box">
+    <h3>Ultimos contenidos</h3>
+    <div class="list-compact">
+      {% for movie in latest_movies %}
+        <div class="compact-item"><span>{{ movie.title }} ({{ movie.get_content_type_display }})</span><small>{{ movie.genre.name }}</small></div>
+      {% empty %}
+        <p class="muted">Sin registros aun.</p>
+      {% endfor %}
+    </div>
+  </article>
+
+  <article class="glass panel-box">
+    <h3>Ultimos usuarios</h3>
+    <div class="list-compact">
+      {% for item in latest_users %}
+        <div class="compact-item"><span>{{ item.username }}</span><small>{{ item.email }}</small></div>
+      {% empty %}
+        <p class="muted">Sin registros aun.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+
+<section class="glass panel-box streams-box">
+  <div class="admin-section-head compact-head">
+    <div>
+      <h3>Actividad por usuario</h3>
+      <p class="muted">Toca un usuario para desplegar su historial reciente de reproduccion.</p>
+    </div>
+  </div>
+  <div class="user-history-list">
+    {% for item in user_histories %}
+      <details class="user-history-card">
+        <summary>
+          <div class="user-history-head">
+            <strong>{{ item.username }}</strong>
+            <small>{{ item.total_views }} vistas | {{ item.device_count }} dispositivos | {{ item.last_seen|date:"d/m H:i" }}</small>
+          </div>
+        </summary>
+        <div class="user-history-body">
+          {% for session in item.entries %}
+            <div class="history-entry">
+              <strong>{{ session.movie.title }}</strong>
+              <small>{{ session.device_type }} | {{ session.operating_system }} | {{ session.browser }} | {{ session.last_seen|date:"d/m H:i" }}</small>
+            </div>
+          {% endfor %}
+        </div>
+      </details>
+    {% empty %}
+      <p class="muted">Aun no hay actividad de reproduccion.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

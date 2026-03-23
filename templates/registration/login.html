@@ -1,0 +1,26 @@
+﻿{% extends "base.html" %}
+{% block title %}Entrar | StreamVerse{% endblock %}
+{% block content %}
+<section class="auth-wrap glass">
+  <h1>Bienvenido de nuevo</h1>
+  <p class="muted">Inicia sesion para ver tu catalogo.</p>
+
+  {% if form.non_field_errors %}
+    <div class="form-errors">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <form method="post" class="auth-form">
+    {% csrf_token %}
+    <label>Usuario</label>
+    {{ form.username }}
+    {% if form.username.errors %}<small class="field-error">{{ form.username.errors|striptags }}</small>{% endif %}
+
+    <label>Contrasena</label>
+    {{ form.password }}
+    {% if form.password.errors %}<small class="field-error">{{ form.password.errors|striptags }}</small>{% endif %}
+
+    <button type="submit" class="btn-primary">Entrar</button>
+  </form>
+  <p class="muted">No tienes cuenta? <a href="{% url 'signup' %}">Registrate aqui</a></p>
+</section>
+{% endblock %}

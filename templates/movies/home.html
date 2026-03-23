@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Inicio | StreamVerse{% endblock %}
+{% block body_class %}home-page{% endblock %}
+{% block scene_theme %}audience{% endblock %}
+{% block scene_kicker %}Private Premiere{% endblock %}
+{% block scene_title %}Tu biblioteca convertida en una experiencia de streaming mas libre y mas tuya{% endblock %}
+{% block content %}
+<section class="landing-hero glass">
+  <div class="landing-copy">
+    <!-- Puedes cambiar tranquilamente estas 4 lineas de texto -->
+    <p class="eyebrow">TU STREAMING, TUS REGLAS</p>
+    <h1>Convierte tu biblioteca en una plataforma que se sienta mas tuya que Netflix.</h1>
+    <p class="lead">Mira tus peliculas y series favoritas desde tu casa, el parque o mientras viajas, sin depender de suscripciones que deciden por ti.</p>
+
+    <div class="selling-points">
+      <span>Tu catalogo vive contigo</span>
+      <span>Sin cuotas mensuales</span>
+    </div>
+
+    <div class="hero-actions landing-actions">
+      {% if user.is_authenticated %}
+        {% if user.is_staff %}
+          <a class="btn-primary" href="{% url 'admin_panel' %}">Entrar al panel</a>
+          <a class="btn-ghost" href="{% url 'admin_movies' %}">Subir catalogo</a>
+        {% else %}
+          <a class="btn-primary" href="{% url 'user_dashboard' %}">Ir a mi espacio</a>
+          <a class="btn-ghost" href="{% url 'home' %}#explorar">Explorar catalogo</a>
+        {% endif %}
+      {% else %}
+        <a class="btn-primary" href="{% url 'signup' %}">Crear mi cuenta</a>
+        <a class="btn-ghost" href="{% url 'login' %}">Ya tengo cuenta</a>
+      {% endif %}
+    </div>
+
+    <form method="get" class="search-strip landing-search">
+      <input type="text" name="q" value="{{ search_query }}" placeholder="Busca una pelicula, genero o ano..." class="search-input">
+      {% if selected_type %}<input type="hidden" name="type" value="{{ selected_type }}">{% endif %}
+      <button type="submit" class="btn-primary">Buscar</button>
+      {% if search_query or selected_type %}<a class="btn-ghost" href="{% url 'home' %}">Limpiar</a>{% endif %}
+    </form>
+
+    <div class="filter-pills compact-pills">
+      <a href="{% url 'home' %}{% if search_query %}?q={{ search_query|urlencode }}{% endif %}" class="pill {% if not selected_type %}is-active{% endif %}">Todo</a>
+      <a href="{% url 'home' %}?type=movie{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" class="pill {% if selected_type == 'movie' %}is-active{% endif %}">Peliculas</a>
+      <a href="{% url 'home' %}?type=series{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" class="pill {% if selected_type == 'series' %}is-active{% endif %}">Series</a>
+    </div>
+  </div>
+
+  {% if latest_movie_card.background_style %}
+  <article class="premiere-card" style="{{ latest_movie_card.background_style }}">
+  {% else %}
+  <article class="premiere-card">
+  {% endif %}
+      <span class="badge badge-hot">Recien agregada</span>
+      <div class="premiere-copy">
+        <p class="premiere-kicker">Estreno de esta biblioteca</p>
+        <h2>{{ latest_movie_card.title }}</h2>
+        <p>{{ latest_movie_card.meta }}</p>
+        <p class="premiere-synopsis">{{ latest_movie_card.synopsis }}</p>
+        <div class="hero-actions">
+          <a class="btn-primary" href="{{ latest_movie_card.detail_url }}">Ver ahora</a>
+          <a class="btn-ghost" href="#explorar">Explorar mas</a>
+        </div>
+      </div>
+    </article>
+</section>
+
+{% if user.is_authenticated and continue_watching %}
+<section class="section-head">
+  <h2>Seguir viendo</h2>
+  <p class="muted">Retoma tus peliculas justo donde te quedaste.</p>
+</section>
+<div class="home-carousel">
+  {% for item in continue_watching %}
+  <a class="poster" href="{% url 'movie_detail' item.movie.slug %}">
+    {% if item.movie.cover_file %}
+    <div class="poster-image" style="background-image:url('{{ item.movie.cover_file.url }}')"></div>
+    {% elif item.movie.cover_url %}
+    <div class="poster-image" style="background-image:url('{{ item.movie.cover_url }}')"></div>
+    {% else %}
+    <div class="poster-image"></div>
+    {% endif %}
+    <div class="poster-meta">
+      <strong>{{ item.movie.title }}</strong>
+      <small>Continuar: {{ item.progress_seconds }}s</small>
+    </div>
+  </a>
+  {% empty %}
+  <p class="muted">Todavia no hay progreso guardado.</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if latest_additions %}
+<section class="section-head" id="explorar">
+  <h2>Lo nuevo en StreamVerse</h2>
+  <p class="muted">Nuevas peliculas y series listas para entrar a tu maraton.</p>
+</section>
+<div class="home-carousel latest-carousel">
+  {% for movie in latest_additions %}
+  <a class="poster home-poster" href="{% url 'movie_detail' movie.slug %}">
+    {% if movie.cover_file %}
+    <div class="poster-image" style="background-image:url('{{ movie.cover_file.url }}')"></div>
+    {% elif movie.cover_url %}
+    <div class="poster-image" style="background-image:url('{{ movie.cover_url }}')"></div>
+    {% else %}
+    <div class="poster-image"></div>
+    {% endif %}
+    <div class="poster-meta">
+      <small class="mini-tag">Nuevo</small>
+      <strong>{{ movie.title }}</strong>
+      <small>{{ movie.get_content_type_display }} | {{ movie.genre.name }}</small>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% for row in genre_rows %}
+<section class="section-head genre-row-head">
+  <h2>{{ row.name }}</h2>
+  <p class="muted">Una fila lista para deslizar y descubrir mas de {{ row.name|lower }}.</p>
+</section>
+<div class="home-carousel genre-carousel">
+  {% for movie in row.items %}
+  <a class="poster home-poster" href="{% url 'movie_detail' movie.slug %}">
+    {% if movie.cover_file %}
+    <div class="poster-image" style="background-image:url('{{ movie.cover_file.url }}')"></div>
+    {% elif movie.cover_url %}
+    <div class="poster-image" style="background-image:url('{{ movie.cover_url }}')"></div>
+    {% else %}
+    <div class="poster-image"></div>
+    {% endif %}
+    <div class="poster-meta">
+      <strong>{{ movie.title }}</strong>
+      <small>{{ movie.get_content_type_display }} | {{ movie.release_year }}</small>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endfor %}
+
+{% if top_trending %}
+<section class="section-head subdued-ranking">
+  <h2>Favoritas de la biblioteca</h2>
+  <p class="muted">Una fila discreta con lo que mas se esta viendo, sin convertir la portada en panel de estadisticas.</p>
+</section>
+<div class="home-carousel rail-compact">
+  {% for item in top_trending %}
+  <a class="poster ranked quiet-ranked home-poster" href="{% url 'movie_detail' item.slug %}">
+    {% if item.cover_file %}
+    <div class="poster-image" style="background-image:url('{{ item.cover_file.url }}')"></div>
+    {% elif item.cover_url %}
+    <div class="poster-image" style="background-image:url('{{ item.cover_url }}')"></div>
+    {% else %}
+    <div class="poster-image"></div>
+    {% endif %}
+    <div class="poster-meta">
+      <strong>{{ item.title }}</strong>
+      <small>{{ item.get_content_type_display }} | {{ item.genre.name }}</small>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if search_query %}
+<section class="section-head">
+  <h2>Resultados de "{{ search_query }}"{% if results_count is not None %} ({{ results_count }}){% endif %}</h2>
+</section>
+<div class="grid">
+  {% for movie in search_results %}
+  <article class="card">
+    {% if movie.cover_file %}
+    <div class="card-image" style="background-image:url('{{ movie.cover_file.url }}')"></div>
+    {% elif movie.cover_url %}
+    <div class="card-image" style="background-image:url('{{ movie.cover_url }}')"></div>
+    {% else %}
+    <div class="card-image"></div>
+    {% endif %}
+    <div class="card-content">
+      <h3>{{ movie.title }}</h3>
+      <p>{{ movie.get_content_type_display }} | {{ movie.genre.name }} | {{ movie.release_year }}</p>
+      <a class="btn-ghost" href="{% url 'movie_detail' movie.slug %}">Ver detalle</a>
+    </div>
+  </article>
+  {% empty %}
+  <p class="muted">No hubo resultados con ese filtro.</p>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,15 @@
+﻿{% extends "base.html" %}
+{% block title %}{{ page_title }} | StreamVerse{% endblock %}
+{% block content %}
+<section class="auth-wrap glass">
+  <h1>{{ page_title }}</h1>
+  <form method="post" class="auth-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="hero-actions">
+      <button type="submit" class="btn-primary">Guardar</button>
+      <a class="btn-ghost" href="{% url 'admin_genres' %}">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

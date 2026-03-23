@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} | StreamVerse{% endblock %}
+{% block scene_theme %}admin{% endblock %}
+{% block scene_kicker %}Batch Import{% endblock %}
+{% block scene_title %}Pega tu lista y crea el catalogo base en minutos{% endblock %}
+{% block content %}
+<section class="dash-header glass admin-head">
+  <div>
+    <h1>{{ page_title }}</h1>
+    <p class="muted">Ideal para las peliculas que ya tienes listas. Primero creamos el catalogo; despues subes portada y video local.</p>
+  </div>
+  <div class="toolbar-links">
+    <a class="btn-ghost" href="{% url 'admin_movie_create' %}">Nuevo individual</a>
+    <a class="btn-mini" href="{% url 'admin_movies' %}">Volver al catalogo</a>
+  </div>
+</section>
+
+<section class="glass admin-form-shell">
+  <form method="post" class="auth-form">
+    {% csrf_token %}
+    <div class="admin-form-grid">
+      <section class="form-card">
+        <h3>Lista de titulos</h3>
+        <label for="{{ form.entries.id_for_label }}">Titulos</label>
+        {{ form.entries }}
+        <p class="muted">Puedes pegar solo titulos o usar formato completo: <code>titulo|ano|genero|tipo</code>.</p>
+      </section>
+
+      <section class="form-card">
+        <h3>Valores por defecto</h3>
+        <label for="{{ form.default_genre.id_for_label }}">Genero por defecto</label>
+        {{ form.default_genre }}
+        <label for="{{ form.default_release_year.id_for_label }}">Ano por defecto</label>
+        {{ form.default_release_year }}
+        <label for="{{ form.default_content_type.id_for_label }}">Tipo por defecto</label>
+        {{ form.default_content_type }}
+        <label class="inline-check" for="{{ form.is_published.id_for_label }}">{{ form.is_published }} Publicar al crear</label>
+      </section>
+    </div>
+
+    <section class="glass hint-box upload-notes">
+      <h3>Ejemplos utiles</h3>
+      {% for line in preview_lines %}
+        <p class="muted"><code>{{ line }}</code></p>
+      {% endfor %}
+      <p class="muted">Para tu caso, puedes pegar primero tu lista completa y dejar <strong>Pendiente</strong> como genero por defecto si luego quieres afinar detalles uno por uno.</p>
+    </section>
+
+    <div class="hero-actions">
+      <button type="submit" class="btn-primary">Crear catalogo base</button>
+      <a class="btn-ghost" href="{% url 'admin_movies' %}">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

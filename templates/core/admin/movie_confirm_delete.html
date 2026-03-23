@@ -1,0 +1,13 @@
+﻿{% extends "base.html" %}
+{% block title %}Eliminar pelicula | StreamVerse{% endblock %}
+{% block content %}
+<section class="auth-wrap glass">
+  <h1>Eliminar pelicula</h1>
+  <p>Vas a eliminar: <strong>{{ movie.title }}</strong></p>
+  <form method="post" class="hero-actions">
+    {% csrf_token %}
+    <button type="submit" class="btn-primary">Si, eliminar</button>
+    <a href="{% url 'admin_movies' %}" class="btn-ghost">Cancelar</a>
+  </form>
+</section>
+{% endblock %}

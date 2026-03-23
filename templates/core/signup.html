@@ -1,0 +1,35 @@
+﻿{% extends "base.html" %}
+{% block title %}Registro | StreamVerse{% endblock %}
+{% block content %}
+<section class="auth-wrap glass">
+  <h1>Crea tu cuenta</h1>
+  <p class="muted">Accede a tus peliculas favoritas desde cualquier dispositivo.</p>
+
+  {% if form.non_field_errors %}
+    <div class="form-errors">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <form method="post" class="auth-form">
+    {% csrf_token %}
+
+    <label>Usuario</label>
+    {{ form.username }}
+    {% if form.username.errors %}<small class="field-error">{{ form.username.errors|striptags }}</small>{% endif %}
+
+    <label>Correo</label>
+    {{ form.email }}
+    {% if form.email.errors %}<small class="field-error">{{ form.email.errors|striptags }}</small>{% endif %}
+
+    <label>Contrasena</label>
+    {{ form.password1 }}
+    {% if form.password1.errors %}<small class="field-error">{{ form.password1.errors|striptags }}</small>{% endif %}
+
+    <label>Confirmar contrasena</label>
+    {{ form.password2 }}
+    {% if form.password2.errors %}<small class="field-error">{{ form.password2.errors|striptags }}</small>{% endif %}
+
+    <button type="submit" class="btn-primary">Crear cuenta</button>
+  </form>
+  <p class="muted">Ya tienes cuenta? <a href="{% url 'login' %}">Inicia sesion</a></p>
+</section>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}App Peliculas{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/main.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}" data-scene-theme="{% block scene_theme %}audience{% endblock %}">
+  <div class="cinema-stage" aria-hidden="true">
+    <canvas id="cinema-scene"></canvas>
+    <div class="cinema-glow cinema-glow-left"></div>
+    <div class="cinema-glow cinema-glow-right"></div>
+    <div class="cinema-copy">
+      <span class="cinema-kicker">{% block scene_kicker %}Cinema At Home{% endblock %}</span>
+      <strong>{% block scene_title %}Snacks, lights and screen time{% endblock %}</strong>
+    </div>
+  </div>
+  <div class="bg-overlay"></div>
+  <header class="topbar glass">
+    <a class="brand" href="{% if user.is_authenticated and user.is_staff %}{% url 'admin_panel' %}{% else %}{% url 'home' %}{% endif %}">StreamVerse</a>
+    <nav class="nav-links">
+      {% if user.is_authenticated %}
+        {% if user.is_staff %}
+          <span class="chip">Admin: {{ user.username }}</span>
+          <a href="{% url 'admin_panel' %}">Panel</a>
+          <a href="{% url 'home' %}" class="admin-switch">Inicio publico</a>
+        {% else %}
+          <a href="{% url 'user_dashboard' %}">Mi espacio</a>
+          <a href="{% url 'user_settings' %}">Ajustes</a>
+        {% endif %}
+        <form method="post" action="{% url 'logout' %}" class="logout-form">
+          {% csrf_token %}
+          <button type="submit" class="btn-mini">Salir</button>
+        </form>
+      {% else %}
+        <a href="{% url 'home' %}">Inicio</a>
+        <a href="{% url 'login' %}">Entrar</a>
+        <a class="btn-mini" href="{% url 'signup' %}">Registro</a>
+      {% endif %}
+    </nav>
+  </header>
+
+  <main class="container">
+    {% if messages %}
+      <div class="flash-wrap">
+      {% for message in messages %}
+        <div class="flash flash-{{ message.tags|default:'info' }}">{{ message }}</div>
+      {% endfor %}
+      </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <script type="module" src="{% static 'js/cinema-scene.js' %}"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

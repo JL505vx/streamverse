@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Archivos | {{ movie.title }}{% endblock %}
+{% block scene_theme %}admin{% endblock %}
+{% block scene_kicker %}Media Room{% endblock %}
+{% block scene_title %}Corrige portadas y videos sin romper la ficha del contenido{% endblock %}
+{% block content %}
+<section class="dash-header glass admin-head">
+  <div>
+    <h1>Archivos de: {{ movie.title }}</h1>
+    <p class="muted">Aqui corriges portada y video local sin mover el resto de la ficha.</p>
+  </div>
+  <div class="toolbar-links">
+    <a class="btn-ghost" href="{% url 'admin_movie_edit' movie.pk %}">Editar ficha</a>
+    <a class="btn-mini" href="{% url 'admin_movies' %}?missing_video=1">Volver a sin video</a>
+  </div>
+</section>
+
+<section class="glass hint-box">
+  <p class="muted">Si subes un archivo nuevo, reemplaza al actual. Si marcas quitar, se elimina el local y puedes dejar URL o volver a subir otro.</p>
+  <p class="muted">Estado actual: {% if movie.video_file %}<strong>Video local cargado</strong>{% elif movie.video_url %}<strong>Video por URL</strong>{% else %}<strong>Sin video</strong>{% endif %}</p>
+</section>
+
+<section class="auth-wrap glass admin-form-shell">
+  <form method="post" enctype="multipart/form-data" class="auth-form">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="form-errors">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="admin-form-grid">
+      <section class="form-card">
+        <h3>Portada</h3>
+        {% if movie.cover_file %}
+          <p class="field-help">Actual: {{ movie.cover_file.name }}</p>
+        {% elif movie.cover_url %}
+          <p class="field-help">Actual por URL: {{ movie.cover_url }}</p>
+        {% else %}
+          <p class="field-help">Aun no hay portada cargada.</p>
+        {% endif %}
+
+        <label for="{{ form.cover_url.id_for_label }}">Portada por URL</label>
+        {{ form.cover_url }}
+        {{ form.cover_url.errors }}
+
+        <label for="{{ form.cover_file.id_for_label }}">Reemplazar portada local</label>
+        {{ form.cover_file }}
+        {{ form.cover_file.errors }}
+        {% if form.cover_file.help_text %}<small class="field-help">{{ form.cover_file.help_text }}</small>{% endif %}
+
+        <label class="inline-check" for="{{ form.remove_cover_file.id_for_label }}">{{ form.remove_cover_file }} {{ form.remove_cover_file.label }}</label>
+        {{ form.remove_cover_file.errors }}
+      </section>
+
+      <section class="form-card">
+        <h3>Video</h3>
+        {% if movie.video_file %}
+          <p class="field-help">Actual: {{ movie.video_file.name }}</p>
+        {% elif movie.video_url %}
+          <p class="field-help">Actual por URL: {{ movie.video_url }}</p>
+        {% else %}
+          <p class="field-help">Aun no hay video cargado.</p>
+        {% endif %}
+
+        <label for="{{ form.video_url.id_for_label }}">Video por URL</label>
+        {{ form.video_url }}
+        {{ form.video_url.errors }}
+
+        <label for="{{ form.video_file.id_for_label }}">Reemplazar video local</label>
+        {{ form.video_file }}
+        {{ form.video_file.errors }}
+        {% if form.video_file.help_text %}<small class="field-help">{{ form.video_file.help_text }}</small>{% endif %}
+
+        <label class="inline-check" for="{{ form.remove_video_file.id_for_label }}">{{ form.remove_video_file }} {{ form.remove_video_file.label }}</label>
+        {{ form.remove_video_file.errors }}
+      </section>
+    </div>
+
+    {% if form.errors %}
+      <div class="form-errors">Revise los campos marcados. Si algo falla, aqui ya queda visible por campo.</div>
+    {% endif %}
+
+    <div class="hero-actions">
+      <button type="submit" class="btn-primary">Guardar archivos</button>
+      <a class="btn-ghost" href="{% url 'admin_movie_edit' movie.pk %}">Editar todo</a>
+      <a class="btn-mini" href="{% url 'admin_movies' %}">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

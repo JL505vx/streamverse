@@ -1,0 +1,37 @@
+﻿{% extends "base.html" %}
+{% block title %}Admin Usuarios | StreamVerse{% endblock %}
+{% block content %}
+<section class="dash-header glass admin-head">
+  <h1>Gestion de usuarios</h1>
+  <a class="btn-primary" href="{% url 'admin_user_create' %}">Nuevo usuario</a>
+</section>
+
+<div class="table-wrap glass">
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Usuario</th>
+        <th>Email</th>
+        <th>Rol</th>
+        <th>Estado</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in users %}
+      <tr>
+        <td>{{ item.username }}</td>
+        <td>{{ item.email }}</td>
+        <td>{% if item.is_staff %}Admin{% else %}Usuario{% endif %}</td>
+        <td>{% if item.is_active %}Activo{% else %}Inactivo{% endif %}</td>
+        <td class="actions">
+          <a class="btn-ghost" href="{% url 'admin_user_edit' item.pk %}">Editar</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="muted">No hay usuarios registrados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

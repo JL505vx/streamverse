@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Ajustes | StreamVerse{% endblock %}
+{% block body_class %}member-page{% endblock %}
+{% block scene_theme %}member{% endblock %}
+{% block content %}
+<section class="dash-header glass member-settings-head">
+  <div>
+    <h1>Perfil y ajustes</h1>
+    <p class="muted">Aqui personalizas tu perfil, revisas desde donde entras y ves tu actividad reciente.</p>
+  </div>
+  <div class="toolbar-links">
+    <a class="btn-ghost" href="{% url 'user_dashboard' %}">Volver a mi espacio</a>
+  </div>
+</section>
+
+<div class="settings-grid member-settings-grid">
+  <section class="glass panel-box">
+    <h2>Perfil</h2>
+    <form method="post" enctype="multipart/form-data" class="auth-form">
+      {% csrf_token %}
+      {{ profile_form.as_p }}
+      <h3>Datos de cuenta</h3>
+      {{ account_form.as_p }}
+      <button type="submit" class="btn-primary">Guardar cambios</button>
+    </form>
+  </section>
+
+  <aside class="glass panel-box member-side-stack">
+    <section class="preview-card member-profile-preview">
+      {% if profile.avatar_file %}
+        <img class="avatar" src="{{ profile.avatar_file.url }}" alt="Avatar">
+      {% elif profile.avatar_url %}
+        <img class="avatar" src="{{ profile.avatar_url }}" alt="Avatar">
+      {% else %}
+        <div class="avatar avatar-fallback">{{ user.username|slice:":1"|upper }}</div>
+      {% endif %}
+      <h4>{{ profile.display_name|default:user.username }}</h4>
+      <p class="muted">{{ profile.bio|default:"Sin bio por ahora." }}</p>
+    </section>
+
+    <section class="member-settings-panel">
+      <h3>Tus conexiones</h3>
+      <div class="device-grid settings-device-grid">
+        {% for item in devices %}
+          <div class="device-chip">
+            <strong>{{ item.device_type }}</strong>
+            <small>{{ item.operating_system }} | {{ item.browser }}</small>
+          </div>
+        {% empty %}
+          <p class="muted">Todavia no registramos conexiones.</p>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="member-settings-panel">
+      <h3>Actividad reciente</h3>
+      <div class="list-compact settings-activity-list">
+        {% for session in recent_sessions %}
+          <a class="compact-item" href="{% url 'movie_detail' session.movie.slug %}">
+            <span>{{ session.movie.title }}</span>
+            <small>{{ session.device_type }} | {{ session.last_seen|date:"d/m H:i" }}</small>
+          </a>
+        {% empty %}
+          <p class="muted">Sin reproducciones recientes.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </aside>
+</div>
+{% endblock %}

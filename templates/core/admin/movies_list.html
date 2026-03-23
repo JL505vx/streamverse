@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Admin Catalogo | StreamVerse{% endblock %}
+{% block body_class %}admin-page{% endblock %}
+{% block scene_theme %}admin{% endblock %}
+{% block scene_kicker %}Catalog Control{% endblock %}
+{% block scene_title %}Tu videoteca lista para crecer sin enredos{% endblock %}
+{% block content %}
+<section class="dash-header glass admin-head">
+  <div>
+    <h1>Gestion de catalogo</h1>
+    <p class="muted">Busca, completa portadas y sube videos sin perder tiempo entre pantallas.</p>
+  </div>
+  <div class="toolbar-links">
+    <a class="btn-ghost" href="{% url 'admin_movies' %}">Todo</a>
+    <a class="btn-ghost" href="{% url 'admin_movies' %}?missing_video=1">Solo sin video</a>
+    <a class="btn-ghost" href="{% url 'admin_movie_bulk_create' %}">Carga rapida</a>
+    <a class="btn-primary" href="{% url 'admin_movie_create' %}">Nuevo contenido</a>
+  </div>
+</section>
+
+<div class="stats admin-mini-stats">
+  <article class="stat glass"><h3>{{ total_count }}</h3><p>Total en catalogo</p></article>
+  <article class="stat glass"><h3>{{ missing_video_count }}</h3><p>Sin video</p></article>
+  <article class="stat glass"><h3>{{ missing_cover_count }}</h3><p>Sin portada</p></article>
+</div>
+
+<section class="glass search-panel">
+  <form method="get" class="search-strip compact-search">
+    <input type="text" name="q" value="{{ search_query }}" placeholder="Busca por titulo, genero o ano..." class="search-input">
+    {% if missing_video_only %}<input type="hidden" name="missing_video" value="1">{% endif %}
+    <button type="submit" class="btn-primary">Buscar</button>
+    {% if search_query or missing_video_only %}
+      <a class="btn-ghost" href="{% url 'admin_movies' %}">Limpiar</a>
+    {% endif %}
+  </form>
+</section>
+
+{% if missing_video_only %}
+  <section class="glass hint-box">
+    <p class="muted">Mostrando solo contenidos sin video. Usa <strong>Archivos</strong> para subir tu pelicula descargada sin editar el resto.</p>
+  </section>
+{% endif %}
+
+<div class="table-wrap glass catalog-table-desktop">
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Titulo</th>
+        <th>Tipo</th>
+        <th>Genero</th>
+        <th>Ano</th>
+        <th>Origen</th>
+        <th>Estado</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for movie in movies %}
+      <tr>
+        <td>{{ movie.title }}</td>
+        <td>{{ movie.get_content_type_display }}</td>
+        <td>{{ movie.genre.name }}</td>
+        <td>{{ movie.release_year }}</td>
+        <td>{% if movie.video_file %}Archivo local{% elif movie.video_url %}URL{% else %}Sin video{% endif %}</td>
+        <td>{% if movie.is_published %}Publicado{% else %}Borrador{% endif %}</td>
+        <td class="actions">
+          <a class="btn-primary" href="{% url 'admin_movie_media' movie.pk %}">Archivos</a>
+          <a class="btn-ghost" href="{% url 'admin_movie_edit' movie.pk %}">Editar</a>
+          <a class="btn-mini" href="{% url 'admin_movie_delete' movie.pk %}">Eliminar</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="muted">No hay contenidos registrados con ese filtro.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="catalog-card-list">
+  {% for movie in movies %}
+  <article class="glass catalog-card">
+    <div class="catalog-card-top">
+      <div>
+        <h3>{{ movie.title }}</h3>
+        <p class="muted">{{ movie.get_content_type_display }} | {{ movie.genre.name }} | {{ movie.release_year }}</p>
+      </div>
+      <span class="catalog-status {% if movie.is_published %}is-live{% else %}is-draft{% endif %}">
+        {% if movie.is_published %}Publicado{% else %}Borrador{% endif %}
+      </span>
+    </div>
+
+    <dl class="catalog-meta-grid">
+      <div>
+        <dt>Origen</dt>
+        <dd>{% if movie.video_file %}Archivo local{% elif movie.video_url %}URL{% else %}Sin video{% endif %}</dd>
+      </div>
+      <div>
+        <dt>Portada</dt>
+        <dd>{% if movie.cover_file or movie.cover_url %}Lista{% else %}Falta portada{% endif %}</dd>
+      </div>
+    </dl>
+
+    <div class="catalog-action-stack">
+      <a class="btn-primary" href="{% url 'admin_movie_media' movie.pk %}">Archivos</a>
+      <a class="btn-ghost" href="{% url 'admin_movie_edit' movie.pk %}">Editar</a>
+      <a class="btn-mini" href="{% url 'admin_movie_delete' movie.pk %}">Eliminar</a>
+    </div>
+  </article>
+  {% empty %}
+  <article class="glass catalog-card catalog-card-empty">
+    <p class="muted">No hay contenidos registrados con ese filtro.</p>
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}
