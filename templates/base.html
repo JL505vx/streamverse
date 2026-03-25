@@ -36,11 +36,13 @@
         {% endif %}
         <form method="post" action="{% url 'logout' %}" class="logout-form">
           {% csrf_token %}
+          <input type="hidden" name="auth_scope" value="{% if user.is_staff %}admin{% else %}user{% endif %}">
           <button type="submit" class="btn-mini">Salir</button>
         </form>
       {% else %}
         <a href="{% url 'home' %}">Inicio</a>
         <a href="{% url 'login' %}">Entrar</a>
+        <a href="{% url 'admin_login' %}" class="admin-switch">Acceso admin</a>
         <a class="btn-mini" href="{% url 'signup' %}">Registro</a>
       {% endif %}
     </nav>
@@ -56,6 +58,30 @@
     {% endif %}
     {% block content %}{% endblock %}
   </main>
+  {% if user.is_authenticated and not user.is_staff %}
+  <nav class="mobile-dock glass" aria-label="Navegacion rapida">
+    <a href="{% url 'home' %}" class="mobile-dock-link">
+      <span class="mobile-dock-icon">Inicio</span>
+      <small>Inicio</small>
+    </a>
+    <a href="{% url 'user_dashboard' %}" class="mobile-dock-link">
+      <span class="mobile-dock-icon">Mi</span>
+      <small>Mi espacio</small>
+    </a>
+    <a href="{% url 'user_settings' %}" class="mobile-dock-link">
+      <span class="mobile-dock-icon">Perfil</span>
+      <small>Ajustes</small>
+    </a>
+    <form method="post" action="{% url 'logout' %}" class="mobile-dock-link mobile-dock-form">
+      {% csrf_token %}
+      <input type="hidden" name="auth_scope" value="user">
+      <button type="submit" class="mobile-dock-button">
+        <span class="mobile-dock-icon">Salir</span>
+        <small>Salir</small>
+      </button>
+    </form>
+  </nav>
+  {% endif %}
   <script type="module" src="{% static 'js/cinema-scene.js' %}"></script>
   {% block extra_scripts %}{% endblock %}
 </body>

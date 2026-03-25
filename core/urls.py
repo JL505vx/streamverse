@@ -3,6 +3,7 @@ from django.urls import path
 
 from .forms import StyledAuthenticationForm
 from .views import (
+    AdminLoginView,
     RoleLoginView,
     admin_genre_create_view,
     admin_genre_delete_view,
@@ -28,6 +29,11 @@ urlpatterns = [
         'login/',
         RoleLoginView.as_view(template_name='registration/login.html', authentication_form=StyledAuthenticationForm),
         name='login',
+    ),
+    path(
+        'panel-admin/login/',
+        AdminLoginView.as_view(template_name='registration/login.html', authentication_form=StyledAuthenticationForm),
+        name='admin_login',
     ),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('registro/', signup_view, name='signup'),

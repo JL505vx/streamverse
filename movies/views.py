@@ -141,7 +141,7 @@ def home_view(request):
 
     top_trending = ranked_movies.filter(total_views__gt=0).order_by('-total_views', '-created_at')[:10]
     latest_movie = latest_movies.first()
-    latest_additions = list(latest_movies.exclude(pk=latest_movie.pk if latest_movie else None)[:8])
+    latest_additions = list(latest_movies[:8])
 
     genre_rows = []
     genre_sources = (

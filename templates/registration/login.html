@@ -1,9 +1,14 @@
-﻿{% extends "base.html" %}
-{% block title %}Entrar | StreamVerse{% endblock %}
+{% extends "base.html" %}
+{% block title %}{% if auth_scope == 'admin' %}Acceso admin | StreamVerse{% else %}Entrar | StreamVerse{% endif %}{% endblock %}
+{% block body_class %}{% if auth_scope == 'admin' %}admin-page{% endif %}{% endblock %}
+{% block scene_theme %}{% if auth_scope == 'admin' %}admin{% else %}member{% endif %}{% endblock %}
+{% block scene_kicker %}{% if auth_scope == 'admin' %}Control Room{% else %}Bienvenido de nuevo{% endif %}{% endblock %}
+{% block scene_title %}{% if auth_scope == 'admin' %}Administra catalogo, usuarios y actividad{% else %}Vuelve a tu cine en casa{% endif %}{% endblock %}
 {% block content %}
-<section class="auth-wrap glass">
-  <h1>Bienvenido de nuevo</h1>
-  <p class="muted">Inicia sesion para ver tu catalogo.</p>
+<section class="auth-wrap glass {% if auth_scope == 'admin' %}admin-auth{% endif %}">
+  <span class="section-kicker">{% if auth_scope == 'admin' %}Acceso administrativo{% else %}Acceso de usuario{% endif %}</span>
+  <h1>{% if auth_scope == 'admin' %}Entrar al panel de administracion{% else %}Bienvenido de nuevo{% endif %}</h1>
+  <p class="muted">{% if auth_scope == 'admin' %}Usa una cuenta con permisos de administrador para entrar al panel privado.{% else %}Inicia sesion para ver tu catalogo, seguir viendo y entrar a tu perfil.{% endif %}</p>
 
   {% if form.non_field_errors %}
     <div class="form-errors">{{ form.non_field_errors }}</div>
@@ -19,8 +24,15 @@
     {{ form.password }}
     {% if form.password.errors %}<small class="field-error">{{ form.password.errors|striptags }}</small>{% endif %}
 
-    <button type="submit" class="btn-primary">Entrar</button>
+    <input type="hidden" name="auth_scope" value="{{ auth_scope|default:'user' }}">
+    {% if request.GET.next %}<input type="hidden" name="next" value="{{ request.GET.next }}">{% endif %}
+    <button type="submit" class="btn-primary">{% if auth_scope == 'admin' %}Entrar al panel{% else %}Entrar{% endif %}</button>
   </form>
-  <p class="muted">No tienes cuenta? <a href="{% url 'signup' %}">Registrate aqui</a></p>
+
+  {% if auth_scope == 'admin' %}
+    <p class="muted">Si solo quieres ver contenido, entra desde <a href="{% url 'login' %}">el acceso de usuarios</a>.</p>
+  {% else %}
+    <p class="muted">No tienes cuenta? <a href="{% url 'signup' %}">Registrate aqui</a></p>
+  {% endif %}
 </section>
 {% endblock %}

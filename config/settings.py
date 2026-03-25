@@ -1,6 +1,9 @@
-﻿from pathlib import Path
+from pathlib import Path
 import os
+from urllib.parse import urlparse
 
+import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -17,7 +20,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'core',
+    'core.apps.CoreConfig',
     'movies',
 ]
 
@@ -50,24 +53,19 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-if os.getenv('POSTGRES_DB'):
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('POSTGRES_DB'),
-            'USER': os.getenv('POSTGRES_USER', 'postgres'),
-            'PASSWORD': os.getenv('POSTGRES_PASSWORD', ''),
-            'HOST': os.getenv('POSTGRES_HOST', '127.0.0.1'),
-            'PORT': os.getenv('POSTGRES_PORT', '5432'),
-        }
-    }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+
+database_url = os.getenv('DATABASE_URL', '').strip()
+if not database_url:
+    raise ImproperlyConfigured('DATABASE_URL es obligatoria. Configura tu conexion PostgreSQL en .env.')
+
+parsed_db_url = urlparse(database_url)
+if parsed_db_url.hostname and parsed_db_url.hostname.endswith('supabase.com') and 'sslmode=' not in database_url:
+    separator = '&' if '?' in database_url else '?'
+    database_url = f'{database_url}{separator}sslmode=require'
+
+DATABASES = {
+    'default': dj_database_url.parse(database_url, conn_max_age=600)
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -93,3 +91,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'user_dashboard'
 LOGOUT_REDIRECT_URL = 'home'
+
+USER_SESSION_COOKIE_NAME = 'user_sessionid'
+ADMIN_SESSION_COOKIE_NAME = 'admin_sessionid'
+SESSION_COOKIE_NAME = USER_SESSION_COOKIE_NAME
+
+USER_CSRF_COOKIE_NAME = 'user_csrftoken'
+ADMIN_CSRF_COOKIE_NAME = 'admin_csrftoken'
+CSRF_COOKIE_NAME = USER_CSRF_COOKIE_NAME

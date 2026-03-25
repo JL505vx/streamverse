@@ -15,6 +15,7 @@ from django.http import FileResponse, Http404, HttpResponse, StreamingHttpRespon
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils._os import safe_join
 
 from movies.models import Favorite, Genre, Movie, PlaybackProgress, WatchSession
@@ -31,18 +32,54 @@ from .forms import (
     UserSignupForm,
 )
 from .models import UserProfile
+from .session_scopes import is_admin_path, resolve_auth_scope
 
 
-admin_required = user_passes_test(lambda u: u.is_authenticated and u.is_staff)
+admin_required = user_passes_test(lambda u: u.is_authenticated and u.is_staff, login_url='admin_login')
 
 
 class RoleLoginView(LoginView):
     """Redirect users to their proper area right after login."""
 
+    redirect_authenticated_user = True
+    forced_auth_scope = None
+
+    def get_auth_scope(self):
+        return self.forced_auth_scope or resolve_auth_scope(self.request)
+
+    def dispatch(self, request, *args, **kwargs):
+        request.auth_scope = self.get_auth_scope()
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['auth_scope'] = getattr(self.request, 'auth_scope', self.get_auth_scope())
+        return context
+
+    def form_valid(self, form):
+        scope = getattr(self.request, 'auth_scope', self.get_auth_scope())
+        if scope == 'admin' and not form.get_user().is_staff:
+            form.add_error(None, 'Necesitas una cuenta de administrador para entrar al panel.')
+            return self.form_invalid(form)
+        return super().form_valid(form)
+
     def get_success_url(self):
-        if self.request.user.is_staff:
+        redirect_to = self.get_redirect_url()
+        if redirect_to and url_has_allowed_host_and_scheme(
+            redirect_to,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
+        ):
+            return redirect_to
+
+        scope = getattr(self.request, 'auth_scope', self.get_auth_scope())
+        if scope == 'admin' or self.request.user.is_staff:
             return reverse('admin_panel')
         return reverse('user_dashboard')
+
+
+class AdminLoginView(RoleLoginView):
+    forced_auth_scope = 'admin'
 
 
 def get_user_profile(user):

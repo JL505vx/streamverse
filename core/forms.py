@@ -7,6 +7,30 @@ from movies.models import Genre, Movie
 from .models import UserProfile
 
 
+COMMON_GENRES = [
+    'Accion',
+    'Animacion',
+    'Aventura',
+    'Ciencia Ficcion',
+    'Comedia',
+    'Crimen',
+    'Documental',
+    'Drama',
+    'Fantasia',
+    'Romance',
+    'Suspenso',
+    'Terror',
+    'Thriller',
+]
+
+
+def ensure_default_genres():
+    existing = set(Genre.objects.values_list('name', flat=True))
+    missing = [Genre(name=name) for name in COMMON_GENRES if name not in existing]
+    if missing:
+        Genre.objects.bulk_create(missing, ignore_conflicts=True)
+
+
 class StyledAuthenticationForm(AuthenticationForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -99,7 +123,10 @@ class MovieAdminForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        ensure_default_genres()
         super().__init__(*args, **kwargs)
+        self.fields['genre'].queryset = Genre.objects.order_by('name')
+        self.fields['genre'].empty_label = 'Selecciona un genero'
         self.fields['cover_file'].help_text = 'Si subes una portada nueva, reemplaza la actual.'
         self.fields['video_file'].help_text = 'Si subes un video nuevo, reemplaza el actual.'
 
