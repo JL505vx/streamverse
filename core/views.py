@@ -1,16 +1,22 @@
 from datetime import timedelta
+import mimetypes
+import os
+import re
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
+from django.http import FileResponse, Http404, HttpResponse
 from django.db.models import Count, Max, Q, Sum
 from django.db.models.deletion import ProtectedError
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils._os import safe_join
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.conf import settings
 
 from movies.models import Favorite, Genre, Movie, PlaybackProgress, WatchSession
 
@@ -32,6 +38,46 @@ from .supabase_storage import delete_public_file
 
 
 admin_required = user_passes_test(lambda u: u.is_authenticated and u.is_staff, login_url='admin_login')
+
+
+def media_stream_view(request, path):
+    file_path = safe_join(settings.MEDIA_ROOT, path)
+    if not file_path or not os.path.exists(file_path):
+        raise Http404('Archivo no encontrado.')
+
+    file_size = os.path.getsize(file_path)
+    content_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+    range_header = request.headers.get('Range', '')
+
+    if not range_header:
+        response = FileResponse(open(file_path, 'rb'), content_type=content_type)
+        response['Content-Length'] = str(file_size)
+        response['Accept-Ranges'] = 'bytes'
+        return response
+
+    match = re.match(r'bytes=(\d*)-(\d*)', range_header)
+    if not match:
+        response = HttpResponse(status=416)
+        response['Content-Range'] = f'bytes */{file_size}'
+        return response
+
+    start_raw, end_raw = match.groups()
+    start = int(start_raw) if start_raw else 0
+    end = int(end_raw) if end_raw else file_size - 1
+    if start >= file_size or end >= file_size or start > end:
+        response = HttpResponse(status=416)
+        response['Content-Range'] = f'bytes */{file_size}'
+        return response
+
+    with open(file_path, 'rb') as source:
+        source.seek(start)
+        content = source.read(end - start + 1)
+
+    response = HttpResponse(content, status=206, content_type=content_type)
+    response['Content-Length'] = str(end - start + 1)
+    response['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+    response['Accept-Ranges'] = 'bytes'
+    return response
 
 
 class RoleLoginView(LoginView):
