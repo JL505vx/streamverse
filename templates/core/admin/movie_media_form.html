@@ -7,7 +7,7 @@
 <section class="dash-header glass admin-head">
   <div>
     <h1>Archivos de: {{ movie.title }}</h1>
-    <p class="muted">Aqui corriges portada y video local sin mover el resto de la ficha.</p>
+    <p class="muted">Aqui corriges la portada en Supabase y el video por URL o almacenamiento local sin mover el resto de la ficha.</p>
   </div>
   <div class="toolbar-links">
     <a class="btn-ghost" href="{% url 'admin_movie_edit' movie.pk %}">Editar ficha</a>
@@ -16,8 +16,8 @@
 </section>
 
 <section class="glass hint-box">
-  <p class="muted">Si subes un archivo nuevo, reemplaza al actual. Si marcas quitar, se elimina el local y puedes dejar URL o volver a subir otro.</p>
-  <p class="muted">Estado actual: {% if movie.video_file %}<strong>Video local cargado</strong>{% elif movie.video_url %}<strong>Video por URL</strong>{% else %}<strong>Sin video</strong>{% endif %}</p>
+  <p class="muted">Si subes una portada nueva, se reemplaza en Supabase. Si subes un video nuevo, se guarda localmente y se actualiza la URL. Si marcas quitar, se borra la referencia y puedes volver a subir otro.</p>
+  <p class="muted">Estado actual: {% if movie.video_url %}<strong>Video publicado</strong>{% else %}<strong>Sin video</strong>{% endif %}</p>
 </section>
 
 <section class="auth-wrap glass admin-form-shell">
@@ -31,9 +31,7 @@
     <div class="admin-form-grid">
       <section class="form-card">
         <h3>Portada</h3>
-        {% if movie.cover_file %}
-          <p class="field-help">Actual: {{ movie.cover_file.name }}</p>
-        {% elif movie.cover_url %}
+        {% if movie.cover_url %}
           <p class="field-help">Actual por URL: {{ movie.cover_url }}</p>
         {% else %}
           <p class="field-help">Aun no hay portada cargada.</p>
@@ -43,7 +41,7 @@
         {{ form.cover_url }}
         {{ form.cover_url.errors }}
 
-        <label for="{{ form.cover_file.id_for_label }}">Reemplazar portada local</label>
+        <label for="{{ form.cover_file.id_for_label }}">Subir nueva portada</label>
         {{ form.cover_file }}
         {{ form.cover_file.errors }}
         {% if form.cover_file.help_text %}<small class="field-help">{{ form.cover_file.help_text }}</small>{% endif %}
@@ -54,9 +52,7 @@
 
       <section class="form-card">
         <h3>Video</h3>
-        {% if movie.video_file %}
-          <p class="field-help">Actual: {{ movie.video_file.name }}</p>
-        {% elif movie.video_url %}
+        {% if movie.video_url %}
           <p class="field-help">Actual por URL: {{ movie.video_url }}</p>
         {% else %}
           <p class="field-help">Aun no hay video cargado.</p>
@@ -66,7 +62,7 @@
         {{ form.video_url }}
         {{ form.video_url.errors }}
 
-        <label for="{{ form.video_file.id_for_label }}">Reemplazar video local</label>
+        <label for="{{ form.video_file.id_for_label }}">Subir nuevo video</label>
         {{ form.video_file }}
         {{ form.video_file.errors }}
         {% if form.video_file.help_text %}<small class="field-help">{{ form.video_file.help_text }}</small>{% endif %}

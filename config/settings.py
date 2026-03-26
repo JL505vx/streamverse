@@ -7,7 +7,10 @@ from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / '.env', override=True)
+env_path = BASE_DIR / '.env'
+load_dotenv(env_path, override=True)
+print(f'[DB DEBUG] dotenv path: {env_path}')
+print(f'[DB DEBUG] dotenv exists: {env_path.exists()}')
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-me')
 DEBUG = os.getenv('DEBUG', '1').strip().lower() in ('1', 'true', 'yes', 'on')
@@ -66,6 +69,10 @@ if parsed_db_url.hostname and parsed_db_url.hostname.endswith('supabase.com') an
 DATABASES = {
     'default': dj_database_url.parse(database_url, conn_max_age=600)
 }
+print(f'[DB DEBUG] DATABASE_URL: {database_url}')
+print(f"[DB DEBUG] active engine: {DATABASES['default']['ENGINE']}")
+print(f"[DB DEBUG] active host: {DATABASES['default'].get('HOST')}")
+print(f"[DB DEBUG] active name: {DATABASES['default'].get('NAME')}")
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -82,7 +89,6 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 

@@ -17,14 +17,28 @@
       {% endif %}
     </div>
 
-    <video id="stream-player" class="player" controls controlsList="nodownload noremoteplayback" disablepictureinpicture preload="metadata" oncontextmenu="return false;" {% if movie.cover_file %}poster="{{ movie.cover_file.url }}"{% elif movie.cover_url %}poster="{{ movie.cover_url }}"{% endif %}>
-      {% if movie.video_file %}
-        <source src="{{ movie.video_file.url }}">
-      {% elif movie.video_url %}
-        <source src="{{ movie.video_url }}">
-      {% endif %}
-      Tu navegador no soporta video.
-    </video>
+    <div class="player-frame" data-player-shell>
+      <video id="stream-player" class="player" controlsList="nodownload noremoteplayback" disablepictureinpicture preload="metadata" oncontextmenu="return false;" {% if movie.cover_url %}poster="{{ movie.cover_url }}"{% endif %}>
+        {% if movie.video_url %}
+          <source src="{{ movie.video_url }}">
+        {% endif %}
+        Tu navegador no soporta video.
+      </video>
+      <div class="player-overlay-controls" data-player-overlay>
+        <div class="player-center-actions">
+          <button type="button" class="player-jump-btn" data-jump="-10" aria-label="Retroceder 10 segundos">-10</button>
+          <button type="button" class="player-play-btn" data-toggle-play aria-label="Pausar o reproducir">Pausar</button>
+          <button type="button" class="player-jump-btn" data-jump="10" aria-label="Adelantar 10 segundos">+10</button>
+        </div>
+        <div class="player-bottom-bar">
+          <div class="player-time-row">
+            <span data-current-time>0:00</span>
+            <span data-duration>0:00</span>
+          </div>
+          <input type="range" min="0" max="0" value="0" step="1" class="player-seek" data-seek aria-label="Mover reproduccion">
+        </div>
+      </div>
+    </div>
     <p>{{ movie.synopsis|default:"Sin sinopsis por ahora." }}</p>
   </div>
 </section>
@@ -37,7 +51,7 @@
   <div class="poster-carousel">
     {% for item in related_movies %}
       <a class="poster recommendation-card" href="{% url 'movie_detail' item.slug %}">
-        <div class="recommendation-image" {% if item.cover_file %}style="background-image:url('{{ item.cover_file.url }}')"{% elif item.cover_url %}style="background-image:url('{{ item.cover_url }}')"{% endif %}></div>
+        <div class="recommendation-image" {% if item.cover_url %}style="background-image:url('{{ item.cover_url }}')"{% endif %}></div>
         <div class="poster-meta recommendation-meta">
           <strong>{{ item.title }}</strong>
           <small>{{ item.release_year }}</small>
@@ -57,13 +71,48 @@
   const progressUrl = "{% url 'update_progress' movie.slug %}";
   const resumeSeconds = Number("{{ resume_seconds|default:0 }}");
   const resumeBtn = document.getElementById('resume-btn');
+  const playerShell = document.querySelector('[data-player-shell]');
+  const playerOverlay = document.querySelector('[data-player-overlay]');
+  const togglePlayBtn = document.querySelector('[data-toggle-play]');
+  const seekInput = document.querySelector('[data-seek]');
+  const currentTimeLabel = document.querySelector('[data-current-time]');
+  const durationLabel = document.querySelector('[data-duration]');
+  const jumpButtons = document.querySelectorAll('[data-jump]');
   let lastSentSecond = -1;
+  let hideOverlayTimer = null;
 
-  function getCookie(name) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
-    return '';
+  const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
+
+  function formatTime(totalSeconds) {
+    const safeSeconds = Math.max(0, Math.floor(totalSeconds || 0));
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+    const seconds = safeSeconds % 60;
+    if (hours > 0) {
+      return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  function syncControls() {
+    if (!seekInput || !currentTimeLabel || !durationLabel || !togglePlayBtn) return;
+    const duration = Number.isFinite(player.duration) ? player.duration : 0;
+    seekInput.max = String(Math.floor(duration));
+    seekInput.value = String(Math.floor(player.currentTime || 0));
+    currentTimeLabel.textContent = formatTime(player.currentTime);
+    durationLabel.textContent = formatTime(duration);
+    togglePlayBtn.textContent = player.paused ? 'Play' : 'Pausa';
+  }
+
+  function showOverlayTemporarily() {
+    if (!playerOverlay || !playerShell) return;
+    playerShell.classList.add('is-active');
+    clearTimeout(hideOverlayTimer);
+    if (window.matchMedia('(hover: hover)').matches && !player.paused) {
+      hideOverlayTimer = setTimeout(() => {
+        playerShell.classList.remove('is-active');
+      }, 1800);
+    }
   }
 
   function sendProgress(force) {
@@ -76,7 +125,7 @@
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRFToken': getCookie('csrftoken'),
+        'X-CSRFToken': csrfToken,
         'X-Requested-With': 'XMLHttpRequest',
       },
       body: JSON.stringify({
@@ -94,10 +143,73 @@
         player.currentTime = jump;
       }
       player.play().catch(() => {});
+      syncControls();
+      showOverlayTemporarily();
     });
   }
 
+  if (togglePlayBtn) {
+    togglePlayBtn.addEventListener('click', function () {
+      if (player.paused) {
+        player.play().catch(() => {});
+      } else {
+        player.pause();
+      }
+      syncControls();
+      showOverlayTemporarily();
+    });
+  }
+
+  jumpButtons.forEach((button) => {
+    button.addEventListener('click', function () {
+      const jump = Number(button.getAttribute('data-jump') || '0');
+      const duration = Number.isFinite(player.duration) ? player.duration : 0;
+      const nextTime = Math.min(Math.max((player.currentTime || 0) + jump, 0), duration || Infinity);
+      player.currentTime = nextTime;
+      syncControls();
+      showOverlayTemporarily();
+    });
+  });
+
+  if (seekInput) {
+    seekInput.addEventListener('input', function () {
+      const nextTime = Number(seekInput.value || 0);
+      if (Number.isFinite(nextTime)) {
+        player.currentTime = nextTime;
+        syncControls();
+      }
+    });
+  }
+
+  if (playerShell) {
+    ['mousemove', 'mouseenter', 'touchstart'].forEach((eventName) => {
+      playerShell.addEventListener(eventName, showOverlayTemporarily, { passive: true });
+    });
+  }
+
+  player.addEventListener('click', function () {
+    if (player.paused) {
+      player.play().catch(() => {});
+    } else {
+      player.pause();
+    }
+    syncControls();
+    showOverlayTemporarily();
+  });
+
+  player.addEventListener('loadedmetadata', syncControls);
+  player.addEventListener('durationchange', syncControls);
+  player.addEventListener('play', function () {
+    syncControls();
+    showOverlayTemporarily();
+  });
+  player.addEventListener('pause', function () {
+    syncControls();
+    showOverlayTemporarily();
+  });
+
   player.addEventListener('timeupdate', function () {
+    syncControls();
     if (Math.floor(player.currentTime) % 12 === 0) {
       sendProgress(false);
     }
@@ -106,6 +218,8 @@
   player.addEventListener('pause', function () { sendProgress(true); });
   player.addEventListener('ended', function () { sendProgress(true); });
   window.addEventListener('beforeunload', function () { sendProgress(true); });
+  syncControls();
+  showOverlayTemporarily();
 })();
 </script>
 {% endblock %}

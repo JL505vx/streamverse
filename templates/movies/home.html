@@ -69,12 +69,10 @@
   <h2>Seguir viendo</h2>
   <p class="muted">Retoma tus peliculas justo donde te quedaste.</p>
 </section>
-<div class="home-carousel">
+  <div class="home-carousel">
   {% for item in continue_watching %}
   <a class="poster" href="{% url 'movie_detail' item.movie.slug %}">
-    {% if item.movie.cover_file %}
-    <div class="poster-image" style="background-image:url('{{ item.movie.cover_file.url }}')"></div>
-    {% elif item.movie.cover_url %}
+    {% if item.movie.cover_url %}
     <div class="poster-image" style="background-image:url('{{ item.movie.cover_url }}')"></div>
     {% else %}
     <div class="poster-image"></div>
@@ -98,9 +96,7 @@
 <div class="home-carousel latest-carousel">
   {% for movie in latest_additions %}
   <a class="poster home-poster" href="{% url 'movie_detail' movie.slug %}">
-    {% if movie.cover_file %}
-    <div class="poster-image" style="background-image:url('{{ movie.cover_file.url }}')"></div>
-    {% elif movie.cover_url %}
+    {% if movie.cover_url %}
     <div class="poster-image" style="background-image:url('{{ movie.cover_url }}')"></div>
     {% else %}
     <div class="poster-image"></div>
@@ -122,9 +118,7 @@
 <div class="grid">
   {% for movie in search_results %}
   <article class="card">
-    {% if movie.cover_file %}
-    <div class="card-image" style="background-image:url('{{ movie.cover_file.url }}')"></div>
-    {% elif movie.cover_url %}
+    {% if movie.cover_url %}
     <div class="card-image" style="background-image:url('{{ movie.cover_url }}')"></div>
     {% else %}
     <div class="card-image"></div>

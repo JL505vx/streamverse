@@ -61,7 +61,7 @@
         <td>{{ movie.get_content_type_display }}</td>
         <td>{{ movie.genre.name }}</td>
         <td>{{ movie.release_year }}</td>
-        <td>{% if movie.video_file %}Archivo local{% elif movie.video_url %}URL{% else %}Sin video{% endif %}</td>
+        <td>{% if movie.video_url %}Archivo local / URL{% else %}Sin video{% endif %}</td>
         <td>{% if movie.is_published %}Publicado{% else %}Borrador{% endif %}</td>
         <td class="actions">
           <a class="btn-primary" href="{% url 'admin_movie_media' movie.pk %}">Archivos</a>
@@ -92,11 +92,11 @@
     <dl class="catalog-meta-grid">
       <div>
         <dt>Origen</dt>
-        <dd>{% if movie.video_file %}Archivo local{% elif movie.video_url %}URL{% else %}Sin video{% endif %}</dd>
+        <dd>{% if movie.video_url %}Archivo local / URL{% else %}Sin video{% endif %}</dd>
       </div>
       <div>
         <dt>Portada</dt>
-        <dd>{% if movie.cover_file or movie.cover_url %}Lista{% else %}Falta portada{% endif %}</dd>
+        <dd>{% if movie.cover_url %}Lista{% else %}Falta portada{% endif %}</dd>
       </div>
     </dl>
 

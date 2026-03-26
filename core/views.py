@@ -1,9 +1,5 @@
-import mimetypes
-import os
-import re
 from datetime import timedelta
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
@@ -11,12 +7,10 @@ from django.contrib.auth.views import LoginView
 from django.db.models import Count, Max, Q, Sum
 from django.db.models.deletion import ProtectedError
 from django.db.models.functions import Coalesce
-from django.http import FileResponse, Http404, HttpResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.utils._os import safe_join
 
 from movies.models import Favorite, Genre, Movie, PlaybackProgress, WatchSession
 
@@ -32,7 +26,9 @@ from .forms import (
     UserSignupForm,
 )
 from .models import UserProfile
-from .session_scopes import is_admin_path, resolve_auth_scope
+from .session_scopes import resolve_auth_scope
+from .local_media import delete_local_video
+from .supabase_storage import delete_public_file
 
 
 admin_required = user_passes_test(lambda u: u.is_authenticated and u.is_staff, login_url='admin_login')
@@ -146,10 +142,14 @@ def user_settings_view(request):
     recent_sessions = list(watch_qs[:8])
 
     if request.method == 'POST' and profile_form.is_valid() and account_form.is_valid():
-        profile_form.save()
-        account_form.save()
-        messages.success(request, 'Ajustes guardados correctamente.')
-        return redirect('user_settings')
+        try:
+            profile_form.save()
+            account_form.save()
+        except Exception as exc:
+            profile_form.add_error(None, f'No se pudo subir el archivo a Supabase Storage: {exc}')
+        else:
+            messages.success(request, 'Ajustes guardados correctamente.')
+            return redirect('user_settings')
 
     return render(
         request,
@@ -210,8 +210,8 @@ def admin_panel_view(request):
     user_histories.sort(key=lambda item: item['last_seen'], reverse=True)
 
     catalog_total = Movie.objects.count()
-    missing_video_total = Movie.objects.filter(Q(video_file='') | Q(video_file__isnull=True), Q(video_url='') | Q(video_url__isnull=True)).count()
-    missing_cover_total = Movie.objects.filter(Q(cover_file='') | Q(cover_file__isnull=True), Q(cover_url='') | Q(cover_url__isnull=True)).count()
+    missing_video_total = Movie.objects.filter(Q(video_url='') | Q(video_url__isnull=True)).count()
+    missing_cover_total = Movie.objects.filter(Q(cover_url='') | Q(cover_url__isnull=True)).count()
     draft_total = Movie.objects.filter(is_published=False).count()
     complete_total = max(catalog_total - missing_video_total - missing_cover_total - draft_total, 0)
 
@@ -221,7 +221,7 @@ def admin_panel_view(request):
         return round((value / catalog_total) * 100)
 
     catalog_needs = Movie.objects.select_related('genre').filter(
-        Q(video_file='') | Q(video_file__isnull=True) | Q(cover_file='') | Q(cover_file__isnull=True)
+        Q(video_url='') | Q(video_url__isnull=True) | Q(cover_url='') | Q(cover_url__isnull=True)
     ).order_by('-created_at')[:6]
 
     context = {
@@ -261,10 +261,7 @@ def admin_movie_list_view(request):
     movies = Movie.objects.select_related('genre').order_by('-created_at')
 
     if missing_video_only:
-        movies = movies.filter(
-            (Q(video_file='') | Q(video_file__isnull=True))
-            & (Q(video_url='') | Q(video_url__isnull=True))
-        )
+        movies = movies.filter(Q(video_url='') | Q(video_url__isnull=True))
 
     if search_query:
         search_filters = Q(title__icontains=search_query) | Q(genre__name__icontains=search_query) | Q(synopsis__icontains=search_query)
@@ -277,8 +274,8 @@ def admin_movie_list_view(request):
         'missing_video_only': missing_video_only,
         'search_query': search_query,
         'total_count': Movie.objects.count(),
-        'missing_video_count': Movie.objects.filter(Q(video_file='') | Q(video_file__isnull=True), Q(video_url='') | Q(video_url__isnull=True)).count(),
-        'missing_cover_count': Movie.objects.filter(Q(cover_file='') | Q(cover_file__isnull=True), Q(cover_url='') | Q(cover_url__isnull=True)).count(),
+        'missing_video_count': Movie.objects.filter(Q(video_url='') | Q(video_url__isnull=True)).count(),
+        'missing_cover_count': Movie.objects.filter(Q(cover_url='') | Q(cover_url__isnull=True)).count(),
     }
     return render(request, 'core/admin/movies_list.html', context)
 
@@ -378,9 +375,13 @@ def admin_movie_bulk_create_view(request):
 def admin_movie_create_view(request):
     form = MovieAdminForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
-        form.save()
-        messages.success(request, 'Contenido creado correctamente.')
-        return redirect('admin_movies')
+        try:
+            form.save()
+        except Exception as exc:
+            form.add_error(None, f'No se pudo subir el archivo a Supabase Storage: {exc}')
+        else:
+            messages.success(request, 'Contenido creado correctamente.')
+            return redirect('admin_movies')
     return render(request, 'core/admin/movie_form.html', {'form': form, 'page_title': 'Nuevo contenido'})
 
 
@@ -389,9 +390,13 @@ def admin_movie_edit_view(request, pk):
     movie = get_object_or_404(Movie, pk=pk)
     form = MovieAdminForm(request.POST or None, request.FILES or None, instance=movie)
     if request.method == 'POST' and form.is_valid():
-        form.save()
-        messages.success(request, 'Contenido actualizado correctamente.')
-        return redirect('admin_movies')
+        try:
+            form.save()
+        except Exception as exc:
+            form.add_error(None, f'No se pudo subir el archivo a Supabase Storage: {exc}')
+        else:
+            messages.success(request, 'Contenido actualizado correctamente.')
+            return redirect('admin_movies')
     return render(request, 'core/admin/movie_form.html', {'form': form, 'page_title': 'Editar contenido', 'movie': movie})
 
 
@@ -400,9 +405,13 @@ def admin_movie_media_view(request, pk):
     movie = get_object_or_404(Movie, pk=pk)
     form = MovieMediaForm(request.POST or None, request.FILES or None, instance=movie)
     if request.method == 'POST' and form.is_valid():
-        form.save()
-        messages.success(request, 'Archivos de contenido actualizados correctamente.')
-        return redirect('admin_movies')
+        try:
+            form.save()
+        except Exception as exc:
+            form.add_error(None, f'No se pudo subir el archivo a Supabase Storage: {exc}')
+        else:
+            messages.success(request, 'Archivos de contenido actualizados correctamente.')
+            return redirect('admin_movies')
 
     return render(request, 'core/admin/movie_media_form.html', {'form': form, 'movie': movie})
 
@@ -411,6 +420,9 @@ def admin_movie_media_view(request, pk):
 def admin_movie_delete_view(request, pk):
     movie = get_object_or_404(Movie, pk=pk)
     if request.method == 'POST':
+        delete_public_file(movie.cover_url)
+        delete_local_video(movie.video_url)
+        delete_public_file(movie.video_url)
         movie.delete()
         messages.success(request, 'Contenido eliminado.')
         return redirect('admin_movies')
@@ -482,67 +494,3 @@ def admin_user_edit_view(request, pk):
         messages.success(request, 'Usuario actualizado correctamente.')
         return redirect('admin_users')
     return render(request, 'core/admin/user_form.html', {'form': form, 'page_title': 'Editar usuario'})
-
-
-def media_stream_view(request, path):
-    """Serve media files with HTTP Range support (required for video seeking)."""
-    try:
-        file_path = safe_join(settings.MEDIA_ROOT, path)
-    except ValueError as exc:
-        raise Http404('Archivo no encontrado') from exc
-
-    if not os.path.isfile(file_path):
-        raise Http404('Archivo no encontrado')
-
-    file_size = os.path.getsize(file_path)
-    content_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
-    range_header = request.headers.get('Range', '')
-
-    if not range_header:
-        response = FileResponse(open(file_path, 'rb'), content_type=content_type)
-        response['Accept-Ranges'] = 'bytes'
-        response['Content-Length'] = str(file_size)
-        return response
-
-    match = re.match(r'bytes=(\d*)-(\d*)', range_header)
-    if not match:
-        return HttpResponse(status=416)
-
-    start_str, end_str = match.groups()
-    if start_str == '' and end_str == '':
-        return HttpResponse(status=416)
-
-    if start_str == '':
-        suffix_len = int(end_str)
-        start = max(file_size - suffix_len, 0)
-        end = file_size - 1
-    else:
-        start = int(start_str)
-        end = int(end_str) if end_str else file_size - 1
-
-    if start >= file_size or start > end:
-        return HttpResponse(status=416)
-
-    end = min(end, file_size - 1)
-    remaining = end - start + 1
-    chunk_size = 8192
-    file_handle = open(file_path, 'rb')
-    file_handle.seek(start)
-
-    def file_iterator():
-        try:
-            bytes_left = remaining
-            while bytes_left > 0:
-                chunk = file_handle.read(min(chunk_size, bytes_left))
-                if not chunk:
-                    break
-                bytes_left -= len(chunk)
-                yield chunk
-        finally:
-            file_handle.close()
-
-    response = StreamingHttpResponse(file_iterator(), status=206, content_type=content_type)
-    response['Accept-Ranges'] = 'bytes'
-    response['Content-Range'] = f'bytes {start}-{end}/{file_size}'
-    response['Content-Length'] = str(remaining)
-    return response

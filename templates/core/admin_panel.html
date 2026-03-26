@@ -82,7 +82,7 @@
       {% for movie in catalog_needs %}
         <a class="compact-item compact-link" href="{% url 'admin_movie_edit' movie.pk %}">
           <span>{{ movie.title }}</span>
-          <small>{% if not movie.video_file and not movie.video_url %}Falta video{% endif %}{% if not movie.video_file and not movie.video_url and not movie.cover_file and not movie.cover_url %} | {% endif %}{% if not movie.cover_file and not movie.cover_url %}Falta portada{% endif %}</small>
+          <small>{% if not movie.video_url %}Falta video{% endif %}{% if not movie.video_url and not movie.cover_url %} | {% endif %}{% if not movie.cover_url %}Falta portada{% endif %}</small>
         </a>
       {% empty %}
         <p class="muted">Todo el catalogo tiene al menos video o portada.</p>
@@ -119,9 +119,7 @@
   {% for movie in top_content %}
     <a class="poster ranked" href="{% url 'admin_movie_edit' movie.pk %}">
       <span class="rank-badge">#{{ forloop.counter }}</span>
-      {% if movie.cover_file %}
-        <div class="poster-image" style="background-image:url('{{ movie.cover_file.url }}')"></div>
-      {% elif movie.cover_url %}
+      {% if movie.cover_url %}
         <div class="poster-image" style="background-image:url('{{ movie.cover_url }}')"></div>
       {% else %}
         <div class="poster-image"></div>

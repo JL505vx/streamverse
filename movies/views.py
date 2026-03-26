@@ -99,12 +99,7 @@ def _build_latest_movie_card(movie):
         }
 
     background_style = ''
-    if movie.cover_file:
-        background_style = (
-            "background-image:linear-gradient(180deg, rgba(8, 10, 18, 0.18), rgba(8, 10, 18, 0.92)), "
-            f"url('{movie.cover_file.url}');"
-        )
-    elif movie.cover_url:
+    if movie.cover_url:
         background_style = (
             "background-image:linear-gradient(180deg, rgba(8, 10, 18, 0.18), rgba(8, 10, 18, 0.92)), "
             f"url('{movie.cover_url}');"

@@ -4,7 +4,9 @@ from django.contrib.auth.models import User
 
 from movies.models import Genre, Movie
 
+from .local_media import delete_local_video, get_local_video_max_bytes, save_uploaded_video_locally
 from .models import UserProfile
+from .supabase_storage import delete_public_file, upload_uploaded_file
 
 
 COMMON_GENRES = [
@@ -62,16 +64,29 @@ class UserSignupForm(UserCreationForm):
 
 
 class UserSettingsForm(forms.ModelForm):
+    avatar_file = forms.FileField(
+        required=False,
+        widget=forms.ClearableFileInput(attrs={'class': 'form-input', 'accept': 'image/*'}),
+    )
+
     class Meta:
         model = UserProfile
-        fields = ['display_name', 'bio', 'avatar_url', 'avatar_file', 'autoplay_enabled']
+        fields = ['display_name', 'bio', 'avatar_url', 'autoplay_enabled']
         widgets = {
             'display_name': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Tu nombre visible'}),
             'bio': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Una frase sobre ti'}),
             'avatar_url': forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
-            'avatar_file': forms.ClearableFileInput(attrs={'class': 'form-input'}),
             'autoplay_enabled': forms.CheckboxInput(attrs={'class': 'form-check'}),
         }
+
+    def save(self, commit=True):
+        profile = super().save(commit=False)
+        avatar_upload = self.cleaned_data.get('avatar_file')
+        if avatar_upload:
+            profile.avatar_url = upload_uploaded_file(avatar_upload, folder='avatars', replace_url=profile.avatar_url)
+        if commit:
+            profile.save()
+        return profile
 
 
 class UserAccountForm(forms.ModelForm):
@@ -95,6 +110,15 @@ class GenreAdminForm(forms.ModelForm):
 
 
 class MovieAdminForm(forms.ModelForm):
+    cover_file = forms.FileField(
+        required=False,
+        widget=forms.FileInput(attrs={'class': 'form-input', 'accept': 'image/*'}),
+    )
+    video_file = forms.FileField(
+        required=False,
+        widget=forms.FileInput(attrs={'class': 'form-input', 'accept': 'video/*'}),
+    )
+
     class Meta:
         model = Movie
         fields = [
@@ -104,9 +128,7 @@ class MovieAdminForm(forms.ModelForm):
             'synopsis',
             'release_year',
             'cover_url',
-            'cover_file',
             'video_url',
-            'video_file',
             'is_published',
         ]
         widgets = {
@@ -116,9 +138,7 @@ class MovieAdminForm(forms.ModelForm):
             'synopsis': forms.Textarea(attrs={'class': 'form-input', 'rows': 4, 'placeholder': 'Descripcion corta'}),
             'release_year': forms.NumberInput(attrs={'class': 'form-input', 'placeholder': '2026'}),
             'cover_url': forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
-            'cover_file': forms.FileInput(attrs={'class': 'form-input', 'accept': 'image/*'}),
             'video_url': forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
-            'video_file': forms.FileInput(attrs={'class': 'form-input', 'accept': 'video/*'}),
             'is_published': forms.CheckboxInput(attrs={'class': 'form-check'}),
         }
 
@@ -127,49 +147,95 @@ class MovieAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['genre'].queryset = Genre.objects.order_by('name')
         self.fields['genre'].empty_label = 'Selecciona un genero'
-        self.fields['cover_file'].help_text = 'Si subes una portada nueva, reemplaza la actual.'
-        self.fields['video_file'].help_text = 'Si subes un video nuevo, reemplaza el actual.'
+        self.fields['cover_file'].help_text = 'Si subes una portada nueva, se guardara en Supabase Storage.'
+        self.fields['video_file'].help_text = 'Si subes un video nuevo, se guardara en almacenamiento local y se enlazara desde video_url.'
+
+    def clean_video_file(self):
+        video_upload = self.cleaned_data.get('video_file')
+        if not video_upload:
+            return video_upload
+        if video_upload.size > get_local_video_max_bytes():
+            raise forms.ValidationError('Los videos grandes deben cargarse por URL o almacenamiento local')
+        return video_upload
+
+    def save(self, commit=True):
+        movie = super().save(commit=False)
+        cover_upload = self.cleaned_data.get('cover_file')
+        video_upload = self.cleaned_data.get('video_file')
+
+        if cover_upload:
+            movie.cover_url = upload_uploaded_file(cover_upload, folder='covers', replace_url=movie.cover_url)
+        if video_upload:
+            delete_local_video(movie.video_url)
+            movie.video_url = save_uploaded_video_locally(video_upload)
+
+        if commit:
+            movie.save()
+        return movie
 
 
 class MovieMediaForm(forms.ModelForm):
+    cover_file = forms.FileField(
+        required=False,
+        widget=forms.FileInput(attrs={'class': 'form-input', 'accept': 'image/*'}),
+    )
+    video_file = forms.FileField(
+        required=False,
+        widget=forms.FileInput(attrs={'class': 'form-input', 'accept': 'video/*'}),
+    )
     remove_cover_file = forms.BooleanField(
         required=False,
-        label='Quitar portada local actual',
+        label='Quitar portada actual',
         widget=forms.CheckboxInput(attrs={'class': 'form-check'}),
     )
     remove_video_file = forms.BooleanField(
         required=False,
-        label='Quitar video local actual',
+        label='Quitar video actual',
         widget=forms.CheckboxInput(attrs={'class': 'form-check'}),
     )
 
     class Meta:
         model = Movie
-        fields = ['cover_url', 'cover_file', 'video_url', 'video_file']
+        fields = ['cover_url', 'video_url']
         widgets = {
             'cover_url': forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
-            'cover_file': forms.FileInput(attrs={'class': 'form-input', 'accept': 'image/*'}),
             'video_url': forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
-            'video_file': forms.FileInput(attrs={'class': 'form-input', 'accept': 'video/*'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['cover_file'].help_text = 'Sube otra portada para reemplazar la actual.'
-        self.fields['video_file'].help_text = 'Sube otro video para reemplazar el actual.'
+        self.fields['cover_file'].help_text = 'Sube otra portada y se reemplazara la URL actual.'
+        self.fields['video_file'].help_text = 'Sube otro video y se reemplazara la URL actual en almacenamiento local.'
+
+    def clean_video_file(self):
+        video_upload = self.cleaned_data.get('video_file')
+        if not video_upload:
+            return video_upload
+        if video_upload.size > get_local_video_max_bytes():
+            raise forms.ValidationError('Los videos grandes deben cargarse por URL o almacenamiento local')
+        return video_upload
 
     def save(self, commit=True):
         movie = super().save(commit=False)
+        cover_upload = self.cleaned_data.get('cover_file')
+        video_upload = self.cleaned_data.get('video_file')
 
         if self.cleaned_data.get('remove_cover_file'):
-            if movie.cover_file:
-                movie.cover_file.delete(save=False)
-            movie.cover_file = ''
+            delete_public_file(movie.cover_url)
+            movie.cover_url = ''
 
         if self.cleaned_data.get('remove_video_file'):
-            if movie.video_file:
-                movie.video_file.delete(save=False)
-            movie.video_file = ''
+            delete_local_video(movie.video_url)
+            delete_public_file(movie.video_url)
+            movie.video_url = ''
+
+        if cover_upload:
+            movie.cover_url = upload_uploaded_file(cover_upload, folder='covers', replace_url=movie.cover_url)
+
+        if video_upload:
+            delete_local_video(movie.video_url)
+            delete_public_file(movie.video_url)
+            movie.video_url = save_uploaded_video_locally(video_upload)
 
         if commit:
             movie.save()

@@ -342,6 +342,94 @@ h1 {
   border: 1px solid var(--line);
 }
 
+.player-frame {
+  position: relative;
+  margin: 0.7rem 0;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.player-frame .player {
+  margin: 0;
+  display: block;
+  background: #000;
+}
+
+.player-overlay-controls {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1rem;
+  background: linear-gradient(180deg, rgba(7, 10, 20, 0.18), rgba(7, 10, 20, 0.56));
+  opacity: 0;
+  transition: opacity .2s ease;
+  pointer-events: none;
+}
+
+.player-frame:hover .player-overlay-controls,
+.player-frame.is-active .player-overlay-controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.player-center-actions {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+}
+
+.player-jump-btn,
+.player-play-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  background: rgba(8, 12, 22, 0.72);
+  backdrop-filter: blur(10px);
+  border-radius: 999px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 14px 24px rgba(0, 0, 0, 0.26);
+}
+
+.player-jump-btn {
+  min-width: 3.4rem;
+  min-height: 3.4rem;
+  padding: 0.7rem;
+  font-size: 1rem;
+}
+
+.player-play-btn {
+  min-width: 6rem;
+  min-height: 3.9rem;
+  padding: 0.85rem 1.25rem;
+  font-size: 1.05rem;
+  background: linear-gradient(140deg, rgba(255, 77, 109, 0.9), rgba(255, 127, 80, 0.9));
+}
+
+.player-bottom-bar {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.player-time-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: rgba(255, 255, 255, 0.94);
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.player-seek {
+  width: 100%;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
 .list-compact {
   display: grid;
   gap: 0.55rem;
@@ -2081,5 +2169,31 @@ code {
     font-size: 0.83rem;
     font-weight: 800;
     letter-spacing: 0.02em;
+  }
+
+  .player-overlay-controls {
+    opacity: 1;
+    padding: 0.8rem;
+    background: linear-gradient(180deg, rgba(7, 10, 20, 0.08), rgba(7, 10, 20, 0.54));
+  }
+
+  .player-center-actions {
+    gap: 0.55rem;
+  }
+
+  .player-jump-btn {
+    min-width: 2.9rem;
+    min-height: 2.9rem;
+    font-size: 0.95rem;
+  }
+
+  .player-play-btn {
+    min-width: 5.2rem;
+    min-height: 3.2rem;
+    font-size: 0.96rem;
+  }
+
+  .player-time-row {
+    font-size: 0.82rem;
   }
 }

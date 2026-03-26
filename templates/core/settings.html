@@ -27,9 +27,7 @@
 
   <aside class="glass panel-box member-side-stack">
     <section class="preview-card member-profile-preview">
-      {% if profile.avatar_file %}
-        <img class="avatar" src="{{ profile.avatar_file.url }}" alt="Avatar">
-      {% elif profile.avatar_url %}
+      {% if profile.avatar_url %}
         <img class="avatar" src="{{ profile.avatar_url }}" alt="Avatar">
       {% else %}
         <div class="avatar avatar-fallback">{{ user.username|slice:":1"|upper }}</div>

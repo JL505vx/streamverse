@@ -25,9 +25,7 @@ class Movie(models.Model):
     synopsis = models.TextField(blank=True)
     release_year = models.PositiveIntegerField()
     cover_url = models.URLField(blank=True)
-    cover_file = models.FileField(upload_to='covers/', blank=True, null=True)
-    video_url = models.URLField(blank=True, help_text='URL del video (opcional si subes archivo local)')
-    video_file = models.FileField(upload_to='videos/', blank=True, null=True)
+    video_url = models.URLField(blank=True, help_text='URL publica del video en Supabase Storage')
     is_published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -48,6 +46,14 @@ class Movie(models.Model):
 
     def __str__(self):
         return self.title
+
+    @property
+    def has_cover(self):
+        return bool(self.cover_url)
+
+    @property
+    def has_video(self):
+        return bool(self.video_url)
 
 
 class WatchSession(models.Model):

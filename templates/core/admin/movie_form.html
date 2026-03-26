@@ -27,8 +27,8 @@
     {% if movie %}
     <section class="glass hint-box upload-notes replace-tip">
       <p class="muted"><strong>Corrige archivos desde una sola ruta:</strong> si subiste la pelicula equivocada, entra a <a href="{% url 'admin_movie_media' movie.pk %}"><strong>Archivos</strong></a> para reemplazar o quitar la portada/video actual sin tocar la ficha.</p>
-      {% if movie.video_file or movie.cover_file %}
-      <p class="muted">Actual: {% if movie.cover_file %}portada local cargada{% endif %}{% if movie.cover_file and movie.video_file %} | {% endif %}{% if movie.video_file %}video local cargado{% endif %}</p>
+      {% if movie.video_url or movie.cover_url %}
+      <p class="muted">Actual: {% if movie.cover_url %}portada en Supabase{% endif %}{% if movie.cover_url and movie.video_url %} | {% endif %}{% if movie.video_url %}video enlazado{% endif %}</p>
       {% endif %}
     </section>
     {% endif %}
@@ -63,21 +63,21 @@
         {{ form.cover_url }}
         {{ form.cover_url.errors }}
 
-        <label for="{{ form.cover_file.id_for_label }}">Portada local</label>
+        <label for="{{ form.cover_file.id_for_label }}">Subir portada</label>
         {{ form.cover_file }}
         {{ form.cover_file.errors }}
         {% if form.cover_file.help_text %}<small class="field-help">{{ form.cover_file.help_text }}</small>{% endif %}
-        {% if movie and movie.cover_file %}<small class="field-help">Actual: {{ movie.cover_file.name }}</small>{% endif %}
+        {% if movie and movie.cover_url %}<small class="field-help">Actual: portada publicada en Supabase Storage</small>{% endif %}
 
         <label for="{{ form.video_url.id_for_label }}">Video por URL</label>
         {{ form.video_url }}
         {{ form.video_url.errors }}
 
-        <label for="{{ form.video_file.id_for_label }}">Video local</label>
+        <label for="{{ form.video_file.id_for_label }}">Subir video</label>
         {{ form.video_file }}
         {{ form.video_file.errors }}
         {% if form.video_file.help_text %}<small class="field-help">{{ form.video_file.help_text }}</small>{% endif %}
-        {% if movie and movie.video_file %}<small class="field-help">Actual: {{ movie.video_file.name }}</small>{% endif %}
+        {% if movie and movie.video_url %}<small class="field-help">Actual: video enlazado desde URL o almacenamiento local</small>{% endif %}
 
         <label class="inline-check" for="{{ form.is_published.id_for_label }}">{{ form.is_published }} Publicar de inmediato</label>
         {{ form.is_published.errors }}

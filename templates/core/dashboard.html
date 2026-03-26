@@ -7,9 +7,7 @@
 {% block content %}
 <section class="dash-header glass profile-hero member-shell">
   <div class="profile-avatar-wrap">
-    {% if profile.avatar_file %}
-      <img class="avatar" src="{{ profile.avatar_file.url }}" alt="Avatar">
-    {% elif profile.avatar_url %}
+    {% if profile.avatar_url %}
       <img class="avatar" src="{{ profile.avatar_url }}" alt="Avatar">
     {% else %}
       <div class="avatar avatar-fallback">{{ user.username|slice:":1"|upper }}</div>
@@ -53,7 +51,7 @@
 <div class="rail poster-rail member-rail member-rail-shell">
   {% for progress in continue_watching %}
     <a class="poster member-poster" href="{% url 'movie_detail' progress.movie.slug %}">
-      <div class="poster-image" {% if progress.movie.cover_file %}style="background-image:url('{{ progress.movie.cover_file.url }}')"{% elif progress.movie.cover_url %}style="background-image:url('{{ progress.movie.cover_url }}')"{% endif %}></div>
+      <div class="poster-image" {% if progress.movie.cover_url %}style="background-image:url('{{ progress.movie.cover_url }}')"{% endif %}></div>
       <div class="poster-meta">
         <strong>{{ progress.movie.title }}</strong>
         <small>{{ progress.progress_seconds }}s guardados</small>
@@ -78,7 +76,7 @@
 <div class="rail poster-rail member-rail member-rail-shell">
   {% for fav in favorites %}
     <a class="poster member-poster" href="{% url 'movie_detail' fav.movie.slug %}">
-      <div class="poster-image" {% if fav.movie.cover_file %}style="background-image:url('{{ fav.movie.cover_file.url }}')"{% elif fav.movie.cover_url %}style="background-image:url('{{ fav.movie.cover_url }}')"{% endif %}></div>
+      <div class="poster-image" {% if fav.movie.cover_url %}style="background-image:url('{{ fav.movie.cover_url }}')"{% endif %}></div>
       <div class="poster-meta">
         <strong>{{ fav.movie.title }}</strong>
         <small>{{ fav.movie.get_content_type_display }} | {{ fav.movie.genre.name }}</small>
@@ -102,7 +100,7 @@
 <div class="rail poster-rail member-rail member-rail-shell">
   {% for movie in recent_movies %}
     <a class="poster member-poster" href="{% url 'movie_detail' movie.slug %}">
-      <div class="poster-image" {% if movie.cover_file %}style="background-image:url('{{ movie.cover_file.url }}')"{% elif movie.cover_url %}style="background-image:url('{{ movie.cover_url }}')"{% endif %}></div>
+      <div class="poster-image" {% if movie.cover_url %}style="background-image:url('{{ movie.cover_url }}')"{% endif %}></div>
       <div class="poster-meta">
         <strong>{{ movie.title }}</strong>
         <small>{{ movie.get_content_type_display }} | {{ movie.genre.name }}</small>

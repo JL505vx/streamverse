@@ -7,7 +7,7 @@ Plataforma personal de streaming hecha con Django para administrar y reproducir 
 - Python 3.11
 - Django 5.2.12
 - PostgreSQL obligatorio por `DATABASE_URL`
-- Supabase compatible
+- Supabase PostgreSQL + Supabase Storage
 - Django Templates
 - CSS personalizado
 - JavaScript
@@ -15,6 +15,7 @@ Plataforma personal de streaming hecha con Django para administrar y reproducir 
 - `dj-database-url`
 - `psycopg`
 - `python-dotenv`
+- `supabase`
 
 ## Base de datos
 
@@ -32,6 +33,43 @@ DATABASE_URL=postgresql://usuario:password@host:5432/postgres?sslmode=require
 Si usas Supabase, el proyecto agrega `sslmode=require` automaticamente si no viene en la URL.
 Aun asi, lo correcto es dejarlo ya incluido en `DATABASE_URL`.
 
+## Storage de archivos
+
+El proyecto ya no usa `media/` como almacenamiento activo para videos, portadas ni avatars.
+
+- Los datos del catalogo viven en PostgreSQL (Supabase)
+- Los archivos viven en Supabase Storage
+- Bucket esperado: `movies`
+- Rutas usadas:
+  - `movies/videos/`
+  - `movies/covers/`
+  - `movies/avatars/`
+
+### Variables obligatorias para Storage
+
+```env
+SUPABASE_URL=https://tu-proyecto.supabase.co
+SUPABASE_KEY=tu-service-role-o-anon-key
+```
+
+Sin esas variables:
+- la app sigue arrancando
+- pero los uploads desde el panel admin mostraran error
+- no se usara almacenamiento local como fallback
+
+### Migracion de archivos legacy
+
+Si todavia tienes archivos en la carpeta local `media/`, ejecuta esto **antes de borrar esa carpeta**:
+
+```powershell
+& .\.venv\Scripts\python.exe manage.py migrate_legacy_media_to_supabase
+```
+
+Ese comando:
+- sube portadas, videos y avatars legacy a Supabase Storage
+- guarda la URL publica en la base de datos
+- elimina el archivo local si la subida fue exitosa
+
 ## Variables de entorno
 
 Archivo base:
@@ -44,6 +82,8 @@ DEBUG=1
 SECRET_KEY=change-me-dev-key
 ALLOWED_HOSTS=127.0.0.1,localhost
 DATABASE_URL=postgresql://usuario:password@host:5432/postgres?sslmode=require
+SUPABASE_URL=https://tu-proyecto.supabase.co
+SUPABASE_KEY=tu-service-role-o-anon-key
 ```
 
 ## Como levantar el proyecto
@@ -82,18 +122,18 @@ Copy-Item .env.example .env
 ### Usuario
 - login y registro
 - perfil y ajustes
-- avatar por archivo o URL
+- avatar por URL o upload a Supabase Storage
 - favoritos (`Mi lista`)
 - `Seguir viendo`
 - guardado de progreso
 - sugerencias por genero
-- reproduccion de video local o por URL
+- reproduccion por URL publica
 
 ### Admin
 - panel admin personalizado
 - CRUD de peliculas y series
 - carga rapida de catalogo
-- gestion de archivos locales
+- subida de portadas y videos a Supabase Storage
 - gestion de generos
 - gestion de usuarios
 - salud del catalogo
