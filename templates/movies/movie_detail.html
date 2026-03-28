@@ -18,12 +18,28 @@
     </div>
 
     <div class="player-frame" data-player-shell>
-      <video id="stream-player" class="player" controlsList="nodownload noremoteplayback" disablepictureinpicture preload="metadata" oncontextmenu="return false;" {% if movie.cover_url %}poster="{{ movie.cover_url }}"{% endif %}>
+      <video id="stream-player" class="player" playsinline controlsList="nodownload noremoteplayback" disablepictureinpicture preload="metadata" oncontextmenu="return false;" {% if movie.cover_url %}poster="{{ movie.cover_url }}"{% endif %}>
         {% if movie.video_url %}
           <source src="{{ movie.video_url }}">
         {% endif %}
         Tu navegador no soporta video.
       </video>
+      <div class="player-mobile-zones" data-mobile-zones aria-hidden="true">
+        <button type="button" class="player-zone player-zone-left" data-touch-jump="-10" tabindex="-1" aria-hidden="true"></button>
+        <button type="button" class="player-zone player-zone-right" data-touch-jump="10" tabindex="-1" aria-hidden="true"></button>
+      </div>
+      <div class="player-brightness-layer" data-brightness-layer aria-hidden="true"></div>
+      <div class="player-side-meter player-side-meter-left" data-brightness-meter aria-hidden="true">
+        <span>Brillo</span>
+        <div class="player-side-meter-track"><i data-brightness-fill></i></div>
+      </div>
+      <div class="player-side-meter player-side-meter-right" data-volume-meter aria-hidden="true">
+        <span>Vol</span>
+        <div class="player-side-meter-track"><i data-volume-fill></i></div>
+      </div>
+      <div class="player-ripple player-ripple-left" data-ripple-left aria-hidden="true">-10s</div>
+      <div class="player-ripple player-ripple-right" data-ripple-right aria-hidden="true">+10s</div>
+      <div class="player-preview-badge" data-preview-badge aria-hidden="true">Vista previa</div>
       <div class="player-overlay-controls" data-player-overlay>
         <div class="player-top-bar">
           <div class="player-key-hints">
@@ -33,6 +49,7 @@
             <span>M silencio</span>
             <span>F pantalla completa</span>
           </div>
+          <button type="button" class="player-mini-action" data-fullscreen-toggle aria-label="Pantalla completa">⛶</button>
         </div>
         <div class="player-center-actions">
           <button type="button" class="player-jump-btn" data-jump="-10" aria-label="Retroceder 10 segundos">-10</button>
@@ -88,10 +105,28 @@
   const currentTimeLabel = document.querySelector('[data-current-time]');
   const durationLabel = document.querySelector('[data-duration]');
   const jumpButtons = document.querySelectorAll('[data-jump]');
+  const touchJumpZones = document.querySelectorAll('[data-touch-jump]');
+  const fullscreenToggleBtn = document.querySelector('[data-fullscreen-toggle]');
+  const brightnessLayer = document.querySelector('[data-brightness-layer]');
+  const brightnessMeter = document.querySelector('[data-brightness-meter]');
+  const brightnessFill = document.querySelector('[data-brightness-fill]');
+  const volumeMeter = document.querySelector('[data-volume-meter]');
+  const volumeFill = document.querySelector('[data-volume-fill]');
+  const leftRipple = document.querySelector('[data-ripple-left]');
+  const rightRipple = document.querySelector('[data-ripple-right]');
+  const previewBadge = document.querySelector('[data-preview-badge]');
   const hud = document.querySelector('[data-player-hud]');
+  const prefersHover = window.matchMedia('(hover: hover)').matches;
+  const isSmallScreen = window.matchMedia('(max-width: 640px)');
   let lastSentSecond = -1;
   let hideOverlayTimer = null;
   let hudTimer = null;
+  let brightnessLevel = 0.12;
+  let touchGesture = null;
+  let meterTimer = null;
+  let previewTimer = null;
+  let previewForcedMute = false;
+  let isPreviewing = false;
 
   const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
 
@@ -116,16 +151,133 @@
     togglePlayBtn.textContent = player.paused ? 'Play' : 'Pausa';
   }
 
-  function togglePlayback() {
-    if (player.paused) {
-      player.play().catch(() => {});
-      showHud('Play');
-    } else {
-      player.pause();
-      showHud('Pausa');
+  function syncImmersiveState() {
+    document.body.classList.toggle('player-immersive', Boolean(document.fullscreenElement));
+  }
+
+  function syncBrightnessLayer() {
+    if (!brightnessLayer) return;
+    brightnessLayer.style.opacity = String(Math.max(0, Math.min(brightnessLevel, 0.55)));
+  }
+
+  function syncMeters() {
+    if (brightnessFill) {
+      brightnessFill.style.height = `${Math.round((1 - brightnessLevel / 0.55) * 100)}%`;
     }
+    if (volumeFill) {
+      const volumeValue = player.muted ? 0 : player.volume;
+      volumeFill.style.height = `${Math.round(volumeValue * 100)}%`;
+    }
+  }
+
+  function setPreviewState(active) {
+    isPreviewing = active;
+    playerShell?.classList.toggle('is-previewing', active);
+    if (previewBadge) previewBadge.style.opacity = active ? '1' : '0';
+  }
+
+  function stopPreview() {
+    clearTimeout(previewTimer);
+    if (!isPreviewing) return;
+    setPreviewState(false);
+    if (previewForcedMute) {
+      player.muted = false;
+      previewForcedMute = false;
+      syncMeters();
+    }
+  }
+
+  function tryAutoplayPreview() {
+    if (!player.currentSrc || resumeSeconds > 0) return;
+    previewForcedMute = true;
+    player.muted = true;
+    player.currentTime = 0;
+    player.play().then(() => {
+      setPreviewState(true);
+      syncMeters();
+      showHud('Vista previa');
+      previewTimer = setTimeout(() => {
+        player.pause();
+        setPreviewState(false);
+      }, 7000);
+    }).catch(() => {
+      previewForcedMute = false;
+      setPreviewState(false);
+    });
+  }
+
+  function showMeters(side) {
+    clearTimeout(meterTimer);
+    if (side === 'left' && brightnessMeter) brightnessMeter.classList.add('is-visible');
+    if (side === 'right' && volumeMeter) volumeMeter.classList.add('is-visible');
+    meterTimer = setTimeout(() => {
+      brightnessMeter?.classList.remove('is-visible');
+      volumeMeter?.classList.remove('is-visible');
+    }, 900);
+  }
+
+  function showRipple(side) {
+    const target = side === 'left' ? leftRipple : rightRipple;
+    if (!target) return;
+    target.classList.remove('is-visible');
+    void target.offsetWidth;
+    target.classList.add('is-visible');
+    setTimeout(() => target.classList.remove('is-visible'), 420);
+  }
+
+  async function enterMobileCinemaMode() {
+    if (!isSmallScreen.matches) return;
+    if (document.fullscreenElement) return;
+
+    try {
+      if (typeof player.webkitEnterFullscreen === 'function') {
+        player.webkitEnterFullscreen();
+        return;
+      }
+
+      if (playerShell && playerShell.requestFullscreen) {
+        await playerShell.requestFullscreen();
+      } else if (player.requestFullscreen) {
+        await player.requestFullscreen();
+      }
+
+      if (screen.orientation && screen.orientation.lock) {
+        try {
+          await screen.orientation.lock('landscape');
+        } catch (error) {
+          // Algunos navegadores bloquean el lock aunque permitan fullscreen.
+        }
+      }
+    } catch (error) {
+      // El navegador puede rechazar fullscreen si no hay gesto confiable.
+    }
+  }
+
+  async function startPlayback() {
+    stopPreview();
+    await player.play().catch(() => {});
+    enterMobileCinemaMode();
+    showHud('Play');
     syncControls();
     showOverlayTemporarily();
+  }
+
+  function keepOverlayVisible() {
+    if (!playerShell) return;
+    playerShell.classList.add('is-active');
+    clearTimeout(hideOverlayTimer);
+  }
+
+  function togglePlayback() {
+    if (player.paused) {
+      startPlayback();
+    } else {
+      stopPreview();
+      player.pause();
+      showHud('Pausa');
+      keepOverlayVisible();
+    }
+    syncControls();
   }
 
   function jumpBy(seconds) {
@@ -133,12 +285,35 @@
     const nextTime = Math.min(Math.max((player.currentTime || 0) + seconds, 0), duration || Infinity);
     player.currentTime = nextTime;
     showHud(seconds > 0 ? `+${seconds}s` : `${seconds}s`);
+    if (seconds < 0) showRipple('left');
+    if (seconds > 0) showRipple('right');
     syncControls();
+    showOverlayTemporarily();
+  }
+
+  function setVolumeByDelta(deltaY) {
+    const nextVolume = Math.min(1, Math.max(0, player.volume - (deltaY / 280)));
+    player.volume = nextVolume;
+    player.muted = nextVolume === 0;
+    syncMeters();
+    showMeters('right');
+    showHud(`Vol ${Math.round(nextVolume * 100)}%`);
+    showOverlayTemporarily();
+  }
+
+  function setBrightnessByDelta(deltaY) {
+    brightnessLevel = Math.min(0.55, Math.max(0, brightnessLevel + (deltaY / 900)));
+    syncBrightnessLayer();
+    syncMeters();
+    showMeters('left');
+    showHud(`Brillo ${Math.round((1 - brightnessLevel / 0.55) * 100)}%`);
     showOverlayTemporarily();
   }
 
   function toggleMute() {
     player.muted = !player.muted;
+    syncMeters();
+    showMeters('right');
     showHud(player.muted ? 'Silencio' : 'Audio');
     showOverlayTemporarily();
   }
@@ -171,10 +346,10 @@
     if (!playerOverlay || !playerShell) return;
     playerShell.classList.add('is-active');
     clearTimeout(hideOverlayTimer);
-    if (window.matchMedia('(hover: hover)').matches && !player.paused) {
+    if (!player.paused) {
       hideOverlayTimer = setTimeout(() => {
         playerShell.classList.remove('is-active');
-      }, 1800);
+      }, prefersHover ? 1800 : 1200);
     }
   }
 
@@ -205,9 +380,7 @@
       if (jump > 0) {
         player.currentTime = jump;
       }
-      player.play().catch(() => {});
-      syncControls();
-      showOverlayTemporarily();
+      startPlayback();
     });
   }
 
@@ -224,6 +397,26 @@
     });
   });
 
+  if (fullscreenToggleBtn) {
+    fullscreenToggleBtn.addEventListener('click', function () {
+      toggleFullscreen();
+    });
+  }
+
+  touchJumpZones.forEach((zone) => {
+    let lastTap = 0;
+    zone.addEventListener('touchstart', function (event) {
+      const now = Date.now();
+      const delta = now - lastTap;
+      lastTap = now;
+      if (delta < 260) {
+        event.preventDefault();
+        const jump = Number(zone.getAttribute('data-touch-jump') || '0');
+        jumpBy(jump);
+      }
+    }, { passive: false });
+  });
+
   if (seekInput) {
     seekInput.addEventListener('input', function () {
       const nextTime = Number(seekInput.value || 0);
@@ -238,10 +431,48 @@
     ['mousemove', 'mouseenter', 'touchstart'].forEach((eventName) => {
       playerShell.addEventListener(eventName, showOverlayTemporarily, { passive: true });
     });
+
+    playerShell.addEventListener('touchstart', function (event) {
+      if (!isSmallScreen.matches) return;
+      const touch = event.touches && event.touches[0];
+      if (!touch) return;
+      const rect = playerShell.getBoundingClientRect();
+      touchGesture = {
+        startX: touch.clientX,
+        startY: touch.clientY,
+        side: touch.clientX - rect.left < rect.width / 2 ? 'left' : 'right',
+      };
+    }, { passive: true });
+
+    playerShell.addEventListener('touchmove', function (event) {
+      if (!isSmallScreen.matches || !touchGesture) return;
+      const touch = event.touches && event.touches[0];
+      if (!touch) return;
+      const deltaY = touch.clientY - touchGesture.startY;
+      if (Math.abs(deltaY) < 18) return;
+      if (touchGesture.side === 'right') {
+        setVolumeByDelta(deltaY);
+      } else {
+        setBrightnessByDelta(deltaY);
+      }
+      touchGesture.startY = touch.clientY;
+    }, { passive: true });
+
+    ['touchend', 'touchcancel'].forEach((eventName) => {
+      playerShell.addEventListener(eventName, function () {
+        touchGesture = null;
+      }, { passive: true });
+    });
   }
 
   player.addEventListener('click', function () {
     togglePlayback();
+  });
+
+  player.addEventListener('play', function () {
+    if (!isPreviewing) {
+      setPreviewState(false);
+    }
   });
 
   document.addEventListener('keydown', function (event) {
@@ -287,15 +518,19 @@
     }
   });
 
-  player.addEventListener('loadedmetadata', syncControls);
+  player.addEventListener('loadedmetadata', function () {
+    syncControls();
+    setTimeout(tryAutoplayPreview, 220);
+  });
   player.addEventListener('durationchange', syncControls);
+  document.addEventListener('fullscreenchange', syncImmersiveState);
   player.addEventListener('play', function () {
     syncControls();
     showOverlayTemporarily();
   });
   player.addEventListener('pause', function () {
     syncControls();
-    showOverlayTemporarily();
+    keepOverlayVisible();
   });
 
   player.addEventListener('timeupdate', function () {
@@ -305,9 +540,17 @@
     }
   });
 
-  player.addEventListener('pause', function () { sendProgress(true); });
-  player.addEventListener('ended', function () { sendProgress(true); });
+  player.addEventListener('pause', function () {
+    if (!isPreviewing) sendProgress(true);
+  });
+  player.addEventListener('ended', function () {
+    stopPreview();
+    sendProgress(true);
+  });
   window.addEventListener('beforeunload', function () { sendProgress(true); });
+  syncBrightnessLayer();
+  syncMeters();
+  syncImmersiveState();
   syncControls();
   showOverlayTemporarily();
 })();
