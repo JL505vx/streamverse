@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% block title %}{{ movie.title }} | StreamVerse{% endblock %}
 {% block body_class %}member-page{% endblock %}
 {% block content %}
@@ -43,13 +43,16 @@
       <div class="player-overlay-controls" data-player-overlay>
         <div class="player-top-bar">
           <div class="player-key-hints">
-            <span>Espacio / K</span>
-            <span>J -10s</span>
-            <span>L +10s</span>
-            <span>M silencio</span>
-            <span>F pantalla completa</span>
+            <span>Atajos: K pausa · J/L ±10 · M silencio</span>
           </div>
-          <button type="button" class="player-mini-action" data-fullscreen-toggle aria-label="Pantalla completa">⛶</button>
+          <div class="player-top-actions">
+            <button type="button" class="player-mini-action" data-volume-toggle aria-label="Volumen">🔊</button>
+            <div class="player-volume-popover" data-volume-popover aria-hidden="true">
+              <span>Volumen</span>
+              <input type="range" min="0" max="100" value="100" step="1" class="player-volume-slider" data-volume-slider aria-label="Control de volumen">
+            </div>
+            <button type="button" class="player-mini-action" data-fullscreen-toggle aria-label="Pantalla completa">⛶</button>
+          </div>
         </div>
         <div class="player-center-actions">
           <button type="button" class="player-jump-btn" data-jump="-10" aria-label="Retroceder 10 segundos">-10</button>
@@ -107,6 +110,9 @@
   const jumpButtons = document.querySelectorAll('[data-jump]');
   const touchJumpZones = document.querySelectorAll('[data-touch-jump]');
   const fullscreenToggleBtn = document.querySelector('[data-fullscreen-toggle]');
+  const volumeToggleBtn = document.querySelector('[data-volume-toggle]');
+  const volumePopover = document.querySelector('[data-volume-popover]');
+  const volumeSlider = document.querySelector('[data-volume-slider]');
   const brightnessLayer = document.querySelector('[data-brightness-layer]');
   const brightnessMeter = document.querySelector('[data-brightness-meter]');
   const brightnessFill = document.querySelector('[data-brightness-fill]');
@@ -128,6 +134,8 @@
   let previewForcedMute = false;
   let isPreviewing = false;
   let suppressClickUntil = 0;
+  let volumePopoverTimer = null;
+  let controlsRecentlyToggled = false;
 
   const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
 
@@ -150,20 +158,81 @@
     currentTimeLabel.textContent = formatTime(player.currentTime);
     durationLabel.textContent = formatTime(duration);
     togglePlayBtn.textContent = player.paused ? 'Play' : 'Pausa';
+    if (volumeSlider) {
+      volumeSlider.value = String(Math.round((player.muted ? 0 : player.volume) * 100));
+    }
+    if (volumeToggleBtn) {
+      volumeToggleBtn.textContent = player.muted || player.volume === 0 ? '🔇' : '🔊';
+    }
   }
 
   function isPlayerFullscreen() {
     return document.fullscreenElement === playerShell || document.fullscreenElement === player;
   }
 
+  async function lockLandscapeIfPossible() {
+    if (!isSmallScreen.matches) return;
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape');
+      }
+    } catch (error) {
+      // Algunos navegadores solo permiten lock parcial o lo bloquean.
+    }
+  }
+
+  function retryLandscapeLock() {
+    [80, 260, 520].forEach((delay) => {
+      window.setTimeout(() => {
+        if (isPlayerFullscreen()) {
+          syncLandscapeFallback();
+          lockLandscapeIfPossible();
+        }
+      }, delay);
+    });
+  }
+
+  function unlockOrientationIfPossible() {
+    try {
+      if (screen.orientation && screen.orientation.unlock) {
+        screen.orientation.unlock();
+      }
+    } catch (error) {
+      // Ignorado.
+    }
+  }
+
+  function syncLandscapeFallback() {
+    if (!playerShell) return;
+    const orientationType = screen.orientation && typeof screen.orientation.type === 'string'
+      ? screen.orientation.type
+      : '';
+    const looksPortrait = window.innerHeight > window.innerWidth || orientationType.startsWith('portrait');
+    const needsFallback = isPlayerFullscreen() && isSmallScreen.matches && looksPortrait;
+    playerShell.classList.toggle('force-landscape', needsFallback);
+  }
+
   function syncImmersiveState() {
     const immersive = isPlayerFullscreen();
     document.body.classList.toggle('player-immersive', immersive);
     playerShell?.classList.toggle('is-fullscreen', immersive);
+    syncLandscapeFallback();
     if (immersive) {
-      showOverlayTemporarily(true);
+      lockLandscapeIfPossible();
+      retryLandscapeLock();
+      window.setTimeout(syncLandscapeFallback, 120);
+      window.setTimeout(syncLandscapeFallback, 420);
+      window.setTimeout(syncLandscapeFallback, 920);
+      if (player.paused) {
+        keepOverlayVisible();
+      } else {
+        showOverlayTemporarily();
+      }
     } else if (player.paused) {
       keepOverlayVisible();
+      unlockOrientationIfPossible();
+    } else {
+      hideOverlay();
     }
   }
 
@@ -218,14 +287,32 @@
     });
   }
 
-  function showMeters(side) {
+  function showMeters(side, durationMs) {
     clearTimeout(meterTimer);
-    if (side === 'left' && brightnessMeter) brightnessMeter.classList.add('is-visible');
-    if (side === 'right' && volumeMeter) volumeMeter.classList.add('is-visible');
+    if ((side === 'left' || side === 'both') && brightnessMeter) brightnessMeter.classList.add('is-visible');
+    if ((side === 'right' || side === 'both') && volumeMeter) volumeMeter.classList.add('is-visible');
     meterTimer = setTimeout(() => {
       brightnessMeter?.classList.remove('is-visible');
       volumeMeter?.classList.remove('is-visible');
-    }, 900);
+    }, durationMs || (isPlayerFullscreen() ? 2400 : 1700));
+  }
+
+  function showVolumePopover() {
+    if (!volumePopover) return;
+    clearTimeout(volumePopoverTimer);
+    volumePopover.classList.add('is-visible');
+    volumePopover.setAttribute('aria-hidden', 'false');
+    volumePopoverTimer = setTimeout(() => {
+      volumePopover.classList.remove('is-visible');
+      volumePopover.setAttribute('aria-hidden', 'true');
+    }, player.paused ? 2600 : 1800);
+  }
+
+  function hideVolumePopover() {
+    if (!volumePopover) return;
+    clearTimeout(volumePopoverTimer);
+    volumePopover.classList.remove('is-visible');
+    volumePopover.setAttribute('aria-hidden', 'true');
   }
 
   function showRipple(side) {
@@ -265,18 +352,8 @@
 
     const fullscreenEntered = await requestPlayerFullscreen();
     if (!fullscreenEntered) return;
-
-    try {
-      if (screen.orientation && screen.orientation.lock) {
-        try {
-          await screen.orientation.lock('landscape');
-        } catch (error) {
-          // Algunos navegadores bloquean el lock aunque permitan fullscreen.
-        }
-      }
-    } catch (error) {
-      // Algunos navegadores no soportan orientation lock.
-    }
+    lockLandscapeIfPossible();
+    retryLandscapeLock();
   }
 
   async function startPlayback() {
@@ -286,10 +363,14 @@
     showHud('Play');
     syncControls();
     showOverlayTemporarily();
+    if (isPlayerFullscreen() || isSmallScreen.matches) {
+      showMeters('both', 2200);
+    }
   }
 
   function keepOverlayVisible() {
     if (!playerShell) return;
+    playerShell.dataset.overlayPinned = '1';
     playerShell.classList.add('is-active');
     clearTimeout(hideOverlayTimer);
   }
@@ -297,24 +378,42 @@
   function hideOverlay() {
     if (!playerShell) return;
     clearTimeout(hideOverlayTimer);
+    delete playerShell.dataset.overlayPinned;
     playerShell.classList.remove('is-active');
+    brightnessMeter?.classList.remove('is-visible');
+    volumeMeter?.classList.remove('is-visible');
+    hideVolumePopover();
   }
 
   function scheduleOverlayHide() {
     clearTimeout(hideOverlayTimer);
-    if (!playerShell || player.paused || isPreviewing) return;
+    if (!playerShell || player.paused || isPreviewing || playerShell.dataset.overlayPinned === '1') return;
     hideOverlayTimer = setTimeout(() => {
-      playerShell.classList.remove('is-active');
-    }, isPlayerFullscreen() ? 1800 : (prefersHover ? 1800 : 2200));
+      hideOverlay();
+    }, isPlayerFullscreen() ? 1350 : (prefersHover ? 1800 : 2100));
   }
 
   function toggleOverlayVisibility() {
     if (!playerShell) return;
     if (playerShell.classList.contains('is-active')) {
       hideOverlay();
+      brightnessMeter?.classList.remove('is-visible');
+      volumeMeter?.classList.remove('is-visible');
     } else {
-      showOverlayTemporarily(true);
+      if (player.paused) {
+        keepOverlayVisible();
+      } else {
+        showOverlayTemporarily();
+      }
+      if (isPlayerFullscreen() || isSmallScreen.matches) {
+        showMeters('both', 2600);
+      }
+      if (!isSmallScreen.matches) {
+        showVolumePopover();
+      }
     }
+    controlsRecentlyToggled = true;
+    window.setTimeout(() => { controlsRecentlyToggled = false; }, 220);
   }
 
   function togglePlayback() {
@@ -338,6 +437,9 @@
     if (seconds > 0) showRipple('right');
     syncControls();
     showOverlayTemporarily();
+    if (isPlayerFullscreen() || isSmallScreen.matches) {
+      showMeters('both', 2200);
+    }
   }
 
   function setVolumeByDelta(deltaY) {
@@ -345,26 +447,40 @@
     player.volume = nextVolume;
     player.muted = nextVolume === 0;
     syncMeters();
-    showMeters('right');
+    showMeters('right', 2600);
+    showVolumePopover();
     showHud(`Vol ${Math.round(nextVolume * 100)}%`);
-    showOverlayTemporarily();
+    if (!isSmallScreen.matches || !isPlayerFullscreen()) {
+      showOverlayTemporarily();
+    } else {
+      scheduleOverlayHide();
+    }
   }
 
   function setBrightnessByDelta(deltaY) {
     brightnessLevel = Math.min(0.55, Math.max(0, brightnessLevel + (deltaY / 900)));
     syncBrightnessLayer();
     syncMeters();
-    showMeters('left');
+    showMeters('left', 2600);
     showHud(`Brillo ${Math.round((1 - brightnessLevel / 0.55) * 100)}%`);
-    showOverlayTemporarily();
+    if (!isSmallScreen.matches || !isPlayerFullscreen()) {
+      showOverlayTemporarily();
+    } else {
+      scheduleOverlayHide();
+    }
   }
 
   function toggleMute() {
     player.muted = !player.muted;
     syncMeters();
-    showMeters('right');
+    showMeters('right', 2600);
+    showVolumePopover();
     showHud(player.muted ? 'Silencio' : 'Audio');
-    showOverlayTemporarily();
+    if (!isSmallScreen.matches || !isPlayerFullscreen()) {
+      showOverlayTemporarily();
+    } else {
+      scheduleOverlayHide();
+    }
   }
 
   function toggleFullscreen() {
@@ -373,15 +489,18 @@
       if (target.requestFullscreen) {
         target.requestFullscreen().then(() => {
           syncImmersiveState();
+          retryLandscapeLock();
         }).catch(() => {});
         showHud('Pantalla completa');
       } else if (player.requestFullscreen) {
         player.requestFullscreen().then(() => {
           syncImmersiveState();
+          retryLandscapeLock();
         }).catch(() => {});
         showHud('Pantalla completa');
       } else if (typeof player.webkitEnterFullscreen === 'function') {
         player.webkitEnterFullscreen();
+        retryLandscapeLock();
         showHud('Pantalla completa');
       }
     } else if (document.exitFullscreen) {
@@ -405,10 +524,23 @@
 
   function showOverlayTemporarily(forceVisible) {
     if (!playerOverlay || !playerShell) return;
+    if (!forceVisible) {
+      delete playerShell.dataset.overlayPinned;
+    }
     playerShell.classList.add('is-active');
     clearTimeout(hideOverlayTimer);
-    if (!forceVisible) {
-      scheduleOverlayHide();
+    if (forceVisible) {
+      playerShell.dataset.overlayPinned = '1';
+      return;
+    }
+    scheduleOverlayHide();
+  }
+
+  function nudgeOverlay() {
+    if (player.paused) {
+      keepOverlayVisible();
+    } else {
+      showOverlayTemporarily();
     }
   }
 
@@ -459,6 +591,34 @@
   if (fullscreenToggleBtn) {
     fullscreenToggleBtn.addEventListener('click', function () {
       toggleFullscreen();
+    });
+  }
+
+  if (volumeToggleBtn) {
+    volumeToggleBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (volumePopover?.classList.contains('is-visible')) {
+        hideVolumePopover();
+      } else {
+        showVolumePopover();
+      }
+      nudgeOverlay();
+      showMeters('right', 2600);
+    });
+  }
+
+  if (volumeSlider) {
+    volumeSlider.addEventListener('input', function () {
+      const value = Math.min(100, Math.max(0, Number(volumeSlider.value || 0)));
+      player.volume = value / 100;
+      player.muted = value === 0;
+      syncControls();
+      syncMeters();
+      showMeters('right', 2600);
+      showVolumePopover();
+      showHud(`Vol ${value}%`);
+      nudgeOverlay();
     });
   }
 
@@ -514,18 +674,22 @@
         touchGesture.moved = true;
       }
       if (Math.abs(deltaY) < 18) return;
+      event.preventDefault();
       if (touchGesture.side === 'right') {
         setVolumeByDelta(deltaY);
       } else {
         setBrightnessByDelta(deltaY);
       }
       touchGesture.startY = touch.clientY;
-    }, { passive: true });
+    }, { passive: false });
 
     ['touchend', 'touchcancel'].forEach((eventName) => {
       playerShell.addEventListener(eventName, function (event) {
+        if (eventName === 'touchcancel') {
+          touchGesture = null;
+          return;
+        }
         if (
-          eventName === 'touchend' &&
           touchGesture &&
           !touchGesture.moved &&
           (isPlayerFullscreen() || isSmallScreen.matches)
@@ -544,9 +708,8 @@
   }
 
   player.addEventListener('click', function () {
-    if (Date.now() < suppressClickUntil) return;
+    if (Date.now() < suppressClickUntil || controlsRecentlyToggled) return;
     if (isPlayerFullscreen() && isSmallScreen.matches) {
-      toggleOverlayVisibility();
       return;
     }
     togglePlayback();
@@ -609,8 +772,19 @@
   document.addEventListener('fullscreenchange', syncImmersiveState);
   player.addEventListener('webkitbeginfullscreen', syncImmersiveState);
   player.addEventListener('webkitendfullscreen', syncImmersiveState);
+  window.addEventListener('resize', syncLandscapeFallback);
+  window.addEventListener('orientationchange', function () {
+    syncLandscapeFallback();
+    if (isPlayerFullscreen()) {
+      lockLandscapeIfPossible();
+      retryLandscapeLock();
+    }
+  });
   player.addEventListener('play', function () {
     syncControls();
+    if (playerShell) {
+      delete playerShell.dataset.overlayPinned;
+    }
     showOverlayTemporarily();
   });
   player.addEventListener('pause', function () {
@@ -638,6 +812,8 @@
   syncImmersiveState();
   syncControls();
   keepOverlayVisible();
+  showMeters('both');
 })();
 </script>
 {% endblock %}
+

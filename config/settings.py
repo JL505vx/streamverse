@@ -15,6 +15,9 @@ print(f'[DB DEBUG] dotenv exists: {env_path.exists()}')
 SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-me')
 DEBUG = os.getenv('DEBUG', '1').strip().lower() in ('1', 'true', 'yes', 'on')
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',') if h.strip()]
+if DEBUG and '*' not in ALLOWED_HOSTS:
+    # En desarrollo permitimos IPs de la red local para probar desde celular.
+    ALLOWED_HOSTS.append('*')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
