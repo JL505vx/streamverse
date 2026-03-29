@@ -43,15 +43,26 @@
       <div class="player-overlay-controls" data-player-overlay>
         <div class="player-top-bar">
           <div class="player-key-hints">
-            <span>Atajos: K pausa · J/L ±10 · M silencio</span>
+            <span>K · J/L · M</span>
           </div>
           <div class="player-top-actions">
-            <button type="button" class="player-mini-action" data-volume-toggle aria-label="Volumen">🔊</button>
+            <button type="button" class="player-mini-action player-mini-action-volume" data-volume-toggle aria-label="Volumen">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M5 10h3l4-4v12l-4-4H5z"></path>
+                <path d="M15.5 8.5a5 5 0 0 1 0 7" fill="none"></path>
+              </svg>
+            </button>
             <div class="player-volume-popover" data-volume-popover aria-hidden="true">
-              <span>Volumen</span>
               <input type="range" min="0" max="100" value="100" step="1" class="player-volume-slider" data-volume-slider aria-label="Control de volumen">
             </div>
-            <button type="button" class="player-mini-action" data-fullscreen-toggle aria-label="Pantalla completa">⛶</button>
+            <button type="button" class="player-mini-action player-mini-action-fullscreen" data-fullscreen-toggle aria-label="Pantalla completa">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M8 3H3v5" fill="none"></path>
+                <path d="M16 3h5v5" fill="none"></path>
+                <path d="M8 21H3v-5" fill="none"></path>
+                <path d="M21 16v5h-5" fill="none"></path>
+              </svg>
+            </button>
           </div>
         </div>
         <div class="player-center-actions">
@@ -162,7 +173,9 @@
       volumeSlider.value = String(Math.round((player.muted ? 0 : player.volume) * 100));
     }
     if (volumeToggleBtn) {
-      volumeToggleBtn.textContent = player.muted || player.volume === 0 ? '🔇' : '🔊';
+      const isMuted = player.muted || player.volume === 0;
+      volumeToggleBtn.classList.toggle('is-muted', isMuted);
+      volumeToggleBtn.setAttribute('aria-label', isMuted ? 'Activar audio' : 'Silenciar');
     }
   }
 
@@ -363,9 +376,6 @@
     showHud('Play');
     syncControls();
     showOverlayTemporarily();
-    if (isPlayerFullscreen() || isSmallScreen.matches) {
-      showMeters('both', 2200);
-    }
   }
 
   function keepOverlayVisible() {
@@ -405,10 +415,7 @@
       } else {
         showOverlayTemporarily();
       }
-      if (isPlayerFullscreen() || isSmallScreen.matches) {
-        showMeters('both', 2600);
-      }
-      if (!isSmallScreen.matches) {
+      if (!isSmallScreen.matches && volumePopover?.classList.contains('is-visible')) {
         showVolumePopover();
       }
     }
@@ -437,18 +444,18 @@
     if (seconds > 0) showRipple('right');
     syncControls();
     showOverlayTemporarily();
-    if (isPlayerFullscreen() || isSmallScreen.matches) {
-      showMeters('both', 2200);
-    }
   }
 
   function setVolumeByDelta(deltaY) {
     const nextVolume = Math.min(1, Math.max(0, player.volume - (deltaY / 280)));
     player.volume = nextVolume;
     player.muted = nextVolume === 0;
+    syncControls();
     syncMeters();
     showMeters('right', 2600);
-    showVolumePopover();
+    if (!isSmallScreen.matches) {
+      showVolumePopover();
+    }
     showHud(`Vol ${Math.round(nextVolume * 100)}%`);
     if (!isSmallScreen.matches || !isPlayerFullscreen()) {
       showOverlayTemporarily();
@@ -472,9 +479,12 @@
 
   function toggleMute() {
     player.muted = !player.muted;
+    syncControls();
     syncMeters();
     showMeters('right', 2600);
-    showVolumePopover();
+    if (!isSmallScreen.matches) {
+      showVolumePopover();
+    }
     showHud(player.muted ? 'Silencio' : 'Audio');
     if (!isSmallScreen.matches || !isPlayerFullscreen()) {
       showOverlayTemporarily();
@@ -598,13 +608,17 @@
     volumeToggleBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
-      if (volumePopover?.classList.contains('is-visible')) {
-        hideVolumePopover();
+      if (isSmallScreen.matches) {
+        toggleMute();
       } else {
-        showVolumePopover();
+        if (volumePopover?.classList.contains('is-visible')) {
+          hideVolumePopover();
+        } else {
+          showVolumePopover();
+          showMeters('right', 2600);
+        }
+        nudgeOverlay();
       }
-      nudgeOverlay();
-      showMeters('right', 2600);
     });
   }
 
@@ -786,6 +800,11 @@
       delete playerShell.dataset.overlayPinned;
     }
     showOverlayTemporarily();
+    window.setTimeout(() => {
+      if (!player.paused && playerShell?.dataset.overlayPinned !== '1') {
+        hideOverlay();
+      }
+    }, isPlayerFullscreen() ? 1100 : 1450);
   });
   player.addEventListener('pause', function () {
     syncControls();
