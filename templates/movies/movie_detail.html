@@ -127,6 +127,7 @@
   let previewTimer = null;
   let previewForcedMute = false;
   let isPreviewing = false;
+  let suppressClickUntil = 0;
 
   const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
 
@@ -159,6 +160,11 @@
     const immersive = isPlayerFullscreen();
     document.body.classList.toggle('player-immersive', immersive);
     playerShell?.classList.toggle('is-fullscreen', immersive);
+    if (immersive) {
+      showOverlayTemporarily(true);
+    } else if (player.paused) {
+      keepOverlayVisible();
+    }
   }
 
   function syncBrightnessLayer() {
@@ -288,6 +294,29 @@
     clearTimeout(hideOverlayTimer);
   }
 
+  function hideOverlay() {
+    if (!playerShell) return;
+    clearTimeout(hideOverlayTimer);
+    playerShell.classList.remove('is-active');
+  }
+
+  function scheduleOverlayHide() {
+    clearTimeout(hideOverlayTimer);
+    if (!playerShell || player.paused || isPreviewing) return;
+    hideOverlayTimer = setTimeout(() => {
+      playerShell.classList.remove('is-active');
+    }, isPlayerFullscreen() ? 1800 : (prefersHover ? 1800 : 2200));
+  }
+
+  function toggleOverlayVisibility() {
+    if (!playerShell) return;
+    if (playerShell.classList.contains('is-active')) {
+      hideOverlay();
+    } else {
+      showOverlayTemporarily(true);
+    }
+  }
+
   function togglePlayback() {
     if (player.paused) {
       startPlayback();
@@ -374,10 +403,13 @@
     }, 900);
   }
 
-  function showOverlayTemporarily() {
+  function showOverlayTemporarily(forceVisible) {
     if (!playerOverlay || !playerShell) return;
     playerShell.classList.add('is-active');
     clearTimeout(hideOverlayTimer);
+    if (!forceVisible) {
+      scheduleOverlayHide();
+    }
   }
 
   function sendProgress(force) {
@@ -455,7 +487,7 @@
   }
 
   if (playerShell) {
-    ['mousemove', 'mouseenter', 'touchstart'].forEach((eventName) => {
+    ['mousemove', 'mouseenter'].forEach((eventName) => {
       playerShell.addEventListener(eventName, showOverlayTemporarily, { passive: true });
     });
 
@@ -468,6 +500,7 @@
         startX: touch.clientX,
         startY: touch.clientY,
         side: touch.clientX - rect.left < rect.width / 2 ? 'left' : 'right',
+        moved: false,
       };
     }, { passive: true });
 
@@ -475,7 +508,11 @@
       if (!isSmallScreen.matches || !touchGesture) return;
       const touch = event.touches && event.touches[0];
       if (!touch) return;
+      const deltaX = touch.clientX - touchGesture.startX;
       const deltaY = touch.clientY - touchGesture.startY;
+      if (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8) {
+        touchGesture.moved = true;
+      }
       if (Math.abs(deltaY) < 18) return;
       if (touchGesture.side === 'right') {
         setVolumeByDelta(deltaY);
@@ -486,13 +523,32 @@
     }, { passive: true });
 
     ['touchend', 'touchcancel'].forEach((eventName) => {
-      playerShell.addEventListener(eventName, function () {
+      playerShell.addEventListener(eventName, function (event) {
+        if (
+          eventName === 'touchend' &&
+          touchGesture &&
+          !touchGesture.moved &&
+          (isPlayerFullscreen() || isSmallScreen.matches)
+        ) {
+          const interactiveTarget = event.target && event.target.closest
+            ? event.target.closest('button, input, a, label')
+            : null;
+          if (!interactiveTarget) {
+            suppressClickUntil = Date.now() + 360;
+            toggleOverlayVisibility();
+          }
+        }
         touchGesture = null;
       }, { passive: true });
     });
   }
 
   player.addEventListener('click', function () {
+    if (Date.now() < suppressClickUntil) return;
+    if (isPlayerFullscreen() && isSmallScreen.matches) {
+      toggleOverlayVisibility();
+      return;
+    }
     togglePlayback();
   });
 
@@ -581,7 +637,7 @@
   syncMeters();
   syncImmersiveState();
   syncControls();
-  showOverlayTemporarily();
+  keepOverlayVisible();
 })();
 </script>
 {% endblock %}
