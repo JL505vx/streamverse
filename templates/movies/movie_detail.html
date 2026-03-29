@@ -151,8 +151,14 @@
     togglePlayBtn.textContent = player.paused ? 'Play' : 'Pausa';
   }
 
+  function isPlayerFullscreen() {
+    return document.fullscreenElement === playerShell || document.fullscreenElement === player;
+  }
+
   function syncImmersiveState() {
-    document.body.classList.toggle('player-immersive', Boolean(document.fullscreenElement));
+    const immersive = isPlayerFullscreen();
+    document.body.classList.toggle('player-immersive', immersive);
+    playerShell?.classList.toggle('is-fullscreen', immersive);
   }
 
   function syncBrightnessLayer() {
@@ -225,22 +231,36 @@
     setTimeout(() => target.classList.remove('is-visible'), 420);
   }
 
-  async function enterMobileCinemaMode() {
-    if (!isSmallScreen.matches) return;
-    if (document.fullscreenElement) return;
-
+  async function requestPlayerFullscreen() {
+    if (isPlayerFullscreen()) return true;
     try {
-      if (typeof player.webkitEnterFullscreen === 'function') {
-        player.webkitEnterFullscreen();
-        return;
-      }
-
       if (playerShell && playerShell.requestFullscreen) {
         await playerShell.requestFullscreen();
-      } else if (player.requestFullscreen) {
-        await player.requestFullscreen();
+        return true;
       }
 
+      if (player.requestFullscreen) {
+        await player.requestFullscreen();
+        return true;
+      }
+
+      if (typeof player.webkitEnterFullscreen === 'function') {
+        player.webkitEnterFullscreen();
+        return true;
+      }
+    } catch (error) {
+      return false;
+    }
+    return false;
+  }
+
+  async function enterMobileCinemaMode() {
+    if (!isSmallScreen.matches || isPlayerFullscreen()) return;
+
+    const fullscreenEntered = await requestPlayerFullscreen();
+    if (!fullscreenEntered) return;
+
+    try {
       if (screen.orientation && screen.orientation.lock) {
         try {
           await screen.orientation.lock('landscape');
@@ -249,7 +269,7 @@
         }
       }
     } catch (error) {
-      // El navegador puede rechazar fullscreen si no hay gesto confiable.
+      // Algunos navegadores no soportan orientation lock.
     }
   }
 
@@ -320,13 +340,25 @@
 
   function toggleFullscreen() {
     const target = playerShell || player;
-    if (!document.fullscreenElement) {
+    if (!isPlayerFullscreen()) {
       if (target.requestFullscreen) {
-        target.requestFullscreen().catch(() => {});
+        target.requestFullscreen().then(() => {
+          syncImmersiveState();
+        }).catch(() => {});
+        showHud('Pantalla completa');
+      } else if (player.requestFullscreen) {
+        player.requestFullscreen().then(() => {
+          syncImmersiveState();
+        }).catch(() => {});
+        showHud('Pantalla completa');
+      } else if (typeof player.webkitEnterFullscreen === 'function') {
+        player.webkitEnterFullscreen();
         showHud('Pantalla completa');
       }
     } else if (document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {});
+      document.exitFullscreen().then(() => {
+        syncImmersiveState();
+      }).catch(() => {});
       showHud('Salir pantalla completa');
     }
     showOverlayTemporarily();
@@ -346,11 +378,6 @@
     if (!playerOverlay || !playerShell) return;
     playerShell.classList.add('is-active');
     clearTimeout(hideOverlayTimer);
-    if (!player.paused) {
-      hideOverlayTimer = setTimeout(() => {
-        playerShell.classList.remove('is-active');
-      }, prefersHover ? 1800 : 1200);
-    }
   }
 
   function sendProgress(force) {
@@ -524,6 +551,8 @@
   });
   player.addEventListener('durationchange', syncControls);
   document.addEventListener('fullscreenchange', syncImmersiveState);
+  player.addEventListener('webkitbeginfullscreen', syncImmersiveState);
+  player.addEventListener('webkitendfullscreen', syncImmersiveState);
   player.addEventListener('play', function () {
     syncControls();
     showOverlayTemporarily();
