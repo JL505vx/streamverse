@@ -145,6 +145,7 @@
   const hud = document.querySelector('[data-player-hud]');
   const prefersHover = window.matchMedia('(hover: hover)').matches;
   const isSmallScreen = window.matchMedia('(max-width: 640px)');
+  const supportsPointerEvents = 'PointerEvent' in window;
   const hasTouchInput = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
   let lastSentSecond = -1;
   let hideOverlayTimer = null;
@@ -158,6 +159,7 @@
   let suppressClickUntil = 0;
   let volumePopoverTimer = null;
   let controlsRecentlyToggled = false;
+  let activeGesturePointerId = null;
 
   const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
   if (playerShell && hasTouchInput) {
@@ -210,6 +212,63 @@
 
   function usesTouchPlayerUI() {
     return hasTouchInput && (isSmallScreen.matches || isPlayerFullscreen());
+  }
+
+  function isTouchLikePointer(event) {
+    return event.pointerType === 'touch' || event.pointerType === 'pen';
+  }
+
+  function startTouchGesture(clientX, clientY) {
+    if (!playerShell || !usesTouchPlayerUI()) return;
+    const rect = playerShell.getBoundingClientRect();
+    touchGesture = {
+      startX: clientX,
+      startY: clientY,
+      side: clientX - rect.left < rect.width / 2 ? 'left' : 'right',
+      moved: false,
+    };
+  }
+
+  function moveTouchGesture(event, clientX, clientY) {
+    if (!usesTouchPlayerUI() || !touchGesture) return;
+    const deltaX = clientX - touchGesture.startX;
+    const deltaY = clientY - touchGesture.startY;
+    if (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8) {
+      touchGesture.moved = true;
+    }
+    if (Math.abs(deltaY) < 18) return;
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    if (touchGesture.side === 'right') {
+      setVolumeByDelta(deltaY);
+    } else {
+      setBrightnessByDelta(deltaY);
+    }
+    touchGesture.startY = clientY;
+  }
+
+  function endTouchGesture(event, cancelled) {
+    if (cancelled) {
+      touchGesture = null;
+      activeGesturePointerId = null;
+      return;
+    }
+    if (
+      touchGesture &&
+      !touchGesture.moved &&
+      usesTouchPlayerUI()
+    ) {
+      const interactiveTarget = event.target && event.target.closest
+        ? event.target.closest('button, input, a, label')
+        : null;
+      if (!interactiveTarget) {
+        suppressClickUntil = Date.now() + 360;
+        toggleOverlayVisibility();
+      }
+    }
+    touchGesture = null;
+    activeGesturePointerId = null;
   }
 
   async function lockLandscapeIfPossible() {
@@ -703,60 +762,75 @@
       playerShell.addEventListener(eventName, showOverlayTemporarily, { passive: true });
     });
 
+    playerShell.addEventListener('pointerdown', function (event) {
+      if (!supportsPointerEvents || !isPlayerFullscreen() || !usesTouchPlayerUI() || !isTouchLikePointer(event)) return;
+      activeGesturePointerId = event.pointerId;
+      startTouchGesture(event.clientX, event.clientY);
+      if (playerShell.setPointerCapture) {
+        try {
+          playerShell.setPointerCapture(event.pointerId);
+        } catch (error) {
+          // Algunos navegadores fullscreen no soportan capture completo.
+        }
+      }
+    }, { passive: true });
+
+    playerShell.addEventListener('pointermove', function (event) {
+      if (
+        !supportsPointerEvents ||
+        !isPlayerFullscreen() ||
+        !usesTouchPlayerUI() ||
+        !isTouchLikePointer(event) ||
+        activeGesturePointerId !== event.pointerId
+      ) {
+        return;
+      }
+      moveTouchGesture(event, event.clientX, event.clientY);
+    }, { passive: false });
+
+    ['pointerup', 'pointercancel'].forEach((eventName) => {
+      playerShell.addEventListener(eventName, function (event) {
+        if (
+          !supportsPointerEvents ||
+          !isPlayerFullscreen() ||
+          !isTouchLikePointer(event) ||
+          activeGesturePointerId !== event.pointerId
+        ) {
+          return;
+        }
+        if (playerShell.releasePointerCapture) {
+          try {
+            if (playerShell.hasPointerCapture && playerShell.hasPointerCapture(event.pointerId)) {
+              playerShell.releasePointerCapture(event.pointerId);
+            }
+          } catch (error) {
+            // Ignorado.
+          }
+        }
+        endTouchGesture(event, eventName === 'pointercancel');
+      }, { passive: true });
+    });
+
     playerShell.addEventListener('touchstart', function (event) {
+      if (supportsPointerEvents && isPlayerFullscreen()) return;
       if (!usesTouchPlayerUI()) return;
       const touch = event.touches && event.touches[0];
       if (!touch) return;
-      const rect = playerShell.getBoundingClientRect();
-      touchGesture = {
-        startX: touch.clientX,
-        startY: touch.clientY,
-        side: touch.clientX - rect.left < rect.width / 2 ? 'left' : 'right',
-        moved: false,
-      };
+      startTouchGesture(touch.clientX, touch.clientY);
     }, { passive: true });
 
     playerShell.addEventListener('touchmove', function (event) {
+      if (supportsPointerEvents && isPlayerFullscreen()) return;
       if (!usesTouchPlayerUI() || !touchGesture) return;
       const touch = event.touches && event.touches[0];
       if (!touch) return;
-      const deltaX = touch.clientX - touchGesture.startX;
-      const deltaY = touch.clientY - touchGesture.startY;
-      if (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8) {
-        touchGesture.moved = true;
-      }
-      if (Math.abs(deltaY) < 18) return;
-      if (event.cancelable) {
-        event.preventDefault();
-      }
-      if (touchGesture.side === 'right') {
-        setVolumeByDelta(deltaY);
-      } else {
-        setBrightnessByDelta(deltaY);
-      }
-      touchGesture.startY = touch.clientY;
+      moveTouchGesture(event, touch.clientX, touch.clientY);
     }, { passive: false });
 
     ['touchend', 'touchcancel'].forEach((eventName) => {
       playerShell.addEventListener(eventName, function (event) {
-        if (eventName === 'touchcancel') {
-          touchGesture = null;
-          return;
-        }
-        if (
-          touchGesture &&
-          !touchGesture.moved &&
-          usesTouchPlayerUI()
-        ) {
-          const interactiveTarget = event.target && event.target.closest
-            ? event.target.closest('button, input, a, label')
-            : null;
-          if (!interactiveTarget) {
-            suppressClickUntil = Date.now() + 360;
-            toggleOverlayVisibility();
-          }
-        }
-        touchGesture = null;
+        if (supportsPointerEvents && isPlayerFullscreen()) return;
+        endTouchGesture(event, eventName === 'touchcancel');
       }, { passive: true });
     });
   }
