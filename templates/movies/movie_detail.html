@@ -145,6 +145,7 @@
   const hud = document.querySelector('[data-player-hud]');
   const prefersHover = window.matchMedia('(hover: hover)').matches;
   const isSmallScreen = window.matchMedia('(max-width: 640px)');
+  const hasTouchInput = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
   let lastSentSecond = -1;
   let hideOverlayTimer = null;
   let hudTimer = null;
@@ -159,6 +160,9 @@
   let controlsRecentlyToggled = false;
 
   const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
+  if (playerShell && hasTouchInput) {
+    playerShell.classList.add('has-touch-input');
+  }
 
   function formatTime(totalSeconds) {
     const safeSeconds = Math.max(0, Math.floor(totalSeconds || 0));
@@ -194,11 +198,22 @@
   }
 
   function isPlayerFullscreen() {
-    return document.fullscreenElement === playerShell || document.fullscreenElement === player;
+    const webkitFullscreen = Boolean(
+      player &&
+      (
+        player.webkitDisplayingFullscreen ||
+        player.webkitPresentationMode === 'fullscreen'
+      )
+    );
+    return document.fullscreenElement === playerShell || document.fullscreenElement === player || webkitFullscreen;
+  }
+
+  function usesTouchPlayerUI() {
+    return hasTouchInput && (isSmallScreen.matches || isPlayerFullscreen());
   }
 
   async function lockLandscapeIfPossible() {
-    if (!isSmallScreen.matches) return;
+    if (!hasTouchInput || (!isSmallScreen.matches && !isPlayerFullscreen())) return;
     try {
       if (screen.orientation && screen.orientation.lock) {
         await screen.orientation.lock('landscape');
@@ -235,7 +250,7 @@
       ? screen.orientation.type
       : '';
     const looksPortrait = window.innerHeight > window.innerWidth || orientationType.startsWith('portrait');
-    const needsFallback = isPlayerFullscreen() && isSmallScreen.matches && looksPortrait;
+    const needsFallback = isPlayerFullscreen() && hasTouchInput && looksPortrait;
     playerShell.classList.toggle('force-landscape', needsFallback);
   }
 
@@ -380,7 +395,7 @@
   }
 
   async function enterMobileCinemaMode() {
-    if (!isSmallScreen.matches || isPlayerFullscreen()) return;
+    if (!hasTouchInput || !isSmallScreen.matches || isPlayerFullscreen()) return;
 
     const fullscreenEntered = await requestPlayerFullscreen();
     if (!fullscreenEntered) return;
@@ -436,7 +451,7 @@
       } else {
         showOverlayTemporarily();
       }
-      if (!isSmallScreen.matches && volumePopover?.classList.contains('is-visible')) {
+      if (!usesTouchPlayerUI() && volumePopover?.classList.contains('is-visible')) {
         showVolumePopover();
       }
     }
@@ -474,11 +489,11 @@
     syncControls();
     syncMeters();
     showMeters('right', 2600);
-    if (!isSmallScreen.matches) {
+    if (!usesTouchPlayerUI()) {
       showVolumePopover();
     }
     showHud(`Vol ${Math.round(nextVolume * 100)}%`);
-    if (!isSmallScreen.matches || !isPlayerFullscreen()) {
+    if (!usesTouchPlayerUI() || !isPlayerFullscreen()) {
       showOverlayTemporarily();
     } else {
       scheduleOverlayHide();
@@ -491,7 +506,7 @@
     syncMeters();
     showMeters('left', 2600);
     showHud(`Brillo ${Math.round((1 - brightnessLevel / 0.55) * 100)}%`);
-    if (!isSmallScreen.matches || !isPlayerFullscreen()) {
+    if (!usesTouchPlayerUI() || !isPlayerFullscreen()) {
       showOverlayTemporarily();
     } else {
       scheduleOverlayHide();
@@ -503,11 +518,11 @@
     syncControls();
     syncMeters();
     showMeters('right', 2600);
-    if (!isSmallScreen.matches) {
+    if (!usesTouchPlayerUI()) {
       showVolumePopover();
     }
     showHud(player.muted ? 'Silencio' : 'Audio');
-    if (!isSmallScreen.matches || !isPlayerFullscreen()) {
+    if (!usesTouchPlayerUI() || !isPlayerFullscreen()) {
       showOverlayTemporarily();
     } else {
       scheduleOverlayHide();
@@ -629,7 +644,7 @@
     volumeToggleBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
-      if (isSmallScreen.matches) {
+      if (usesTouchPlayerUI()) {
         toggleMute();
       } else {
         if (volumePopover?.classList.contains('is-visible')) {
@@ -689,7 +704,7 @@
     });
 
     playerShell.addEventListener('touchstart', function (event) {
-      if (!isSmallScreen.matches) return;
+      if (!usesTouchPlayerUI()) return;
       const touch = event.touches && event.touches[0];
       if (!touch) return;
       const rect = playerShell.getBoundingClientRect();
@@ -702,7 +717,7 @@
     }, { passive: true });
 
     playerShell.addEventListener('touchmove', function (event) {
-      if (!isSmallScreen.matches || !touchGesture) return;
+      if (!usesTouchPlayerUI() || !touchGesture) return;
       const touch = event.touches && event.touches[0];
       if (!touch) return;
       const deltaX = touch.clientX - touchGesture.startX;
@@ -731,7 +746,7 @@
         if (
           touchGesture &&
           !touchGesture.moved &&
-          (isPlayerFullscreen() || isSmallScreen.matches)
+          usesTouchPlayerUI()
         ) {
           const interactiveTarget = event.target && event.target.closest
             ? event.target.closest('button, input, a, label')
@@ -748,7 +763,7 @@
 
   player.addEventListener('click', function () {
     if (Date.now() < suppressClickUntil || controlsRecentlyToggled) return;
-    if (isPlayerFullscreen() && isSmallScreen.matches) {
+    if (isPlayerFullscreen() && usesTouchPlayerUI()) {
       return;
     }
     togglePlayback();

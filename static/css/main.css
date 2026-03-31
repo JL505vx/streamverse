@@ -568,6 +568,12 @@ h1 {
   z-index: 7;
 }
 
+.player-frame.has-touch-input:fullscreen .player-mobile-zones,
+.player-frame.has-touch-input:-webkit-full-screen .player-mobile-zones,
+.player-frame.has-touch-input.is-fullscreen .player-mobile-zones {
+  display: block;
+}
+
 .player-frame:fullscreen .player-overlay-controls,
 .player-frame:-webkit-full-screen .player-overlay-controls,
 .player-frame.is-fullscreen .player-overlay-controls {
