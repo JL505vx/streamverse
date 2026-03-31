@@ -25,17 +25,21 @@
         Tu navegador no soporta video.
       </video>
       <div class="player-mobile-zones" data-mobile-zones aria-hidden="true">
-        <button type="button" class="player-zone player-zone-left" data-touch-jump="-10" tabindex="-1" aria-hidden="true"></button>
-        <button type="button" class="player-zone player-zone-right" data-touch-jump="10" tabindex="-1" aria-hidden="true"></button>
+        <div class="player-zone player-zone-left" data-touch-jump="-10"></div>
+        <div class="player-zone player-zone-right" data-touch-jump="10"></div>
       </div>
       <div class="player-brightness-layer" data-brightness-layer aria-hidden="true"></div>
-      <div class="player-side-meter player-side-meter-left" data-brightness-meter aria-hidden="true">
-        <span>Brillo</span>
-        <div class="player-side-meter-track"><i data-brightness-fill></i></div>
-      </div>
-      <div class="player-side-meter player-side-meter-right" data-volume-meter aria-hidden="true">
-        <span>Vol</span>
-        <div class="player-side-meter-track"><i data-volume-fill></i></div>
+      <div class="player-level-indicators" data-level-indicators aria-hidden="true">
+        <div class="player-level-chip player-level-chip-brightness" data-brightness-meter aria-hidden="true">
+          <span class="player-level-label">Brillo</span>
+          <div class="player-level-track"><i data-brightness-fill></i></div>
+          <span class="player-level-value" data-brightness-value>78%</span>
+        </div>
+        <div class="player-level-chip player-level-chip-volume" data-volume-meter aria-hidden="true">
+          <span class="player-level-label">Volumen</span>
+          <div class="player-level-track"><i data-volume-fill></i></div>
+          <span class="player-level-value" data-volume-value>100%</span>
+        </div>
       </div>
       <div class="player-ripple player-ripple-left" data-ripple-left aria-hidden="true">-10s</div>
       <div class="player-ripple player-ripple-right" data-ripple-right aria-hidden="true">+10s</div>
@@ -67,7 +71,9 @@
         </div>
         <div class="player-center-actions">
           <button type="button" class="player-jump-btn" data-jump="-10" aria-label="Retroceder 10 segundos">-10</button>
-          <button type="button" class="player-play-btn" data-toggle-play aria-label="Pausar o reproducir">Pausar</button>
+          <button type="button" class="player-play-btn" data-toggle-play aria-label="Reproducir">
+            <span class="sr-only" data-toggle-play-text>Play</span>
+          </button>
           <button type="button" class="player-jump-btn" data-jump="10" aria-label="Adelantar 10 segundos">+10</button>
         </div>
         <div class="player-bottom-bar">
@@ -115,6 +121,7 @@
   const playerShell = document.querySelector('[data-player-shell]');
   const playerOverlay = document.querySelector('[data-player-overlay]');
   const togglePlayBtn = document.querySelector('[data-toggle-play]');
+  const togglePlayText = document.querySelector('[data-toggle-play-text]');
   const seekInput = document.querySelector('[data-seek]');
   const currentTimeLabel = document.querySelector('[data-current-time]');
   const durationLabel = document.querySelector('[data-duration]');
@@ -127,8 +134,11 @@
   const brightnessLayer = document.querySelector('[data-brightness-layer]');
   const brightnessMeter = document.querySelector('[data-brightness-meter]');
   const brightnessFill = document.querySelector('[data-brightness-fill]');
+  const brightnessValueLabel = document.querySelector('[data-brightness-value]');
   const volumeMeter = document.querySelector('[data-volume-meter]');
   const volumeFill = document.querySelector('[data-volume-fill]');
+  const volumeValueLabel = document.querySelector('[data-volume-value]');
+  const levelIndicators = document.querySelector('[data-level-indicators]');
   const leftRipple = document.querySelector('[data-ripple-left]');
   const rightRipple = document.querySelector('[data-ripple-right]');
   const previewBadge = document.querySelector('[data-preview-badge]');
@@ -168,7 +178,11 @@
     seekInput.value = String(Math.floor(player.currentTime || 0));
     currentTimeLabel.textContent = formatTime(player.currentTime);
     durationLabel.textContent = formatTime(duration);
-    togglePlayBtn.textContent = player.paused ? 'Play' : 'Pausa';
+    togglePlayBtn.classList.toggle('is-playing', !player.paused);
+    togglePlayBtn.setAttribute('aria-label', player.paused ? 'Reproducir' : 'Pausar');
+    if (togglePlayText) {
+      togglePlayText.textContent = player.paused ? 'Play' : 'Pausa';
+    }
     if (volumeSlider) {
       volumeSlider.value = String(Math.round((player.muted ? 0 : player.volume) * 100));
     }
@@ -255,13 +269,16 @@
   }
 
   function syncMeters() {
+    const brightnessPercent = Math.round((1 - brightnessLevel / 0.55) * 100);
+    const volumePercent = Math.round((player.muted ? 0 : player.volume) * 100);
     if (brightnessFill) {
-      brightnessFill.style.height = `${Math.round((1 - brightnessLevel / 0.55) * 100)}%`;
+      brightnessFill.style.height = `${brightnessPercent}%`;
     }
     if (volumeFill) {
-      const volumeValue = player.muted ? 0 : player.volume;
-      volumeFill.style.height = `${Math.round(volumeValue * 100)}%`;
+      volumeFill.style.height = `${volumePercent}%`;
     }
+    if (brightnessValueLabel) brightnessValueLabel.textContent = `${brightnessPercent}%`;
+    if (volumeValueLabel) volumeValueLabel.textContent = `${volumePercent}%`;
   }
 
   function setPreviewState(active) {
@@ -302,11 +319,13 @@
 
   function showMeters(side, durationMs) {
     clearTimeout(meterTimer);
+    if (levelIndicators) levelIndicators.classList.add('is-visible');
     if ((side === 'left' || side === 'both') && brightnessMeter) brightnessMeter.classList.add('is-visible');
     if ((side === 'right' || side === 'both') && volumeMeter) volumeMeter.classList.add('is-visible');
     meterTimer = setTimeout(() => {
       brightnessMeter?.classList.remove('is-visible');
       volumeMeter?.classList.remove('is-visible');
+      levelIndicators?.classList.remove('is-visible');
     }, durationMs || (isPlayerFullscreen() ? 2400 : 1700));
   }
 
@@ -392,6 +411,7 @@
     playerShell.classList.remove('is-active');
     brightnessMeter?.classList.remove('is-visible');
     volumeMeter?.classList.remove('is-visible');
+    levelIndicators?.classList.remove('is-visible');
     hideVolumePopover();
   }
 
@@ -409,6 +429,7 @@
       hideOverlay();
       brightnessMeter?.classList.remove('is-visible');
       volumeMeter?.classList.remove('is-visible');
+      levelIndicators?.classList.remove('is-visible');
     } else {
       if (player.paused) {
         keepOverlayVisible();
@@ -643,7 +664,9 @@
       const delta = now - lastTap;
       lastTap = now;
       if (delta < 260) {
-        event.preventDefault();
+        if (event.cancelable) {
+          event.preventDefault();
+        }
         const jump = Number(zone.getAttribute('data-touch-jump') || '0');
         jumpBy(jump);
       }
@@ -688,7 +711,9 @@
         touchGesture.moved = true;
       }
       if (Math.abs(deltaY) < 18) return;
-      event.preventDefault();
+      if (event.cancelable) {
+        event.preventDefault();
+      }
       if (touchGesture.side === 'right') {
         setVolumeByDelta(deltaY);
       } else {
