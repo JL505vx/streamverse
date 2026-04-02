@@ -98,6 +98,23 @@ class AuthFlowTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers['Location'], reverse('home'))
 
+    def test_csrf_failure_uses_friendly_template(self):
+        self.login_admin()
+
+        response = self.client.post(
+            reverse('admin_logout'),
+            {
+                'auth_scope': 'admin',
+                'csrfmiddlewaretoken': 'token-invalido',
+            },
+            **self.common_headers,
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTemplateUsed(response, 'errors/csrf_failure.html')
+        self.assertContains(response, 'No pudimos validar esta solicitud', status_code=403)
+        self.assertNotContains(response, 'Forbidden (403)', status_code=403)
+
     def test_user_dashboard_keeps_regular_logout_route(self):
         self.login_user()
 

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Solicitud no valida | StreamVerse{% endblock %}
+{% block body_class %}{% if is_admin_scope %}admin-page{% else %}member-page{% endif %}{% endblock %}
+{% block scene_theme %}{% if is_admin_scope %}admin{% else %}member{% endif %}{% endblock %}
+{% block scene_kicker %}{% if is_admin_scope %}Panel protegido{% else %}Seguridad activa{% endif %}{% endblock %}
+{% block scene_title %}{% if is_admin_scope %}No pudimos validar esa accion del panel{% else %}No pudimos validar esa accion{% endif %}{% endblock %}
+{% block content %}
+<section class="auth-wrap glass {% if is_admin_scope %}admin-auth{% endif %}">
+  <span class="eyebrow">{% if is_admin_scope %}Solicitud del panel{% else %}Solicitud protegida{% endif %}</span>
+  <h1>No pudimos validar esta solicitud</h1>
+  <p class="muted">La pagina que envio el formulario ya no coincide con el token de seguridad actual. Suele pasar al dejar la pagina abierta mucho tiempo, volver atras o cambiar de sesion.</p>
+
+  <div class="flash-wrap">
+    <div class="flash flash-error">Recarga la pagina anterior y vuelve a intentarlo. Si estabas saliendo de tu cuenta, intenta una sola vez mas desde la vista actualizada.</div>
+  </div>
+
+  <div class="hero-actions">
+    <a href="{{ primary_url }}" class="btn-primary">{{ primary_label }}</a>
+    <a href="{{ secondary_url }}" class="btn-ghost">{{ secondary_label }}</a>
+  </div>
+
+  {% if debug_reason %}
+    <div class="flash" style="margin-top: 1rem;">
+      <strong>Detalle tecnico</strong>
+      <p class="muted" style="margin-bottom: 0;">{{ debug_reason }}</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

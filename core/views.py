@@ -136,6 +136,44 @@ class AdminLogoutView(RoleLogoutView):
     forced_auth_scope = 'admin'
 
 
+def csrf_failure_view(request, reason='', template_name='errors/csrf_failure.html'):
+    auth_scope = resolve_auth_scope(request)
+    is_admin_scope = auth_scope == 'admin'
+    user = getattr(request, 'user', None)
+    is_authenticated = bool(user and user.is_authenticated)
+
+    safe_referer = ''
+    referer = request.META.get('HTTP_REFERER', '')
+    if referer and url_has_allowed_host_and_scheme(
+        referer,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        safe_referer = referer
+
+    if is_admin_scope:
+        primary_url = safe_referer or (reverse('admin_panel') if is_authenticated and user.is_staff else reverse('admin_login'))
+        primary_label = 'Volver al panel' if is_authenticated and getattr(user, 'is_staff', False) else 'Entrar como admin'
+        secondary_url = reverse('home')
+        secondary_label = 'Ir al inicio'
+    else:
+        primary_url = safe_referer or (reverse('user_dashboard') if is_authenticated else reverse('login'))
+        primary_label = 'Volver a mi espacio' if is_authenticated else 'Entrar de nuevo'
+        secondary_url = reverse('home')
+        secondary_label = 'Ir al inicio'
+
+    context = {
+        'auth_scope': auth_scope,
+        'is_admin_scope': is_admin_scope,
+        'primary_url': primary_url,
+        'primary_label': primary_label,
+        'secondary_url': secondary_url,
+        'secondary_label': secondary_label,
+        'debug_reason': reason if settings.DEBUG else '',
+    }
+    return render(request, template_name, context=context, status=403)
+
+
 def get_user_profile(user):
     profile, _ = UserProfile.objects.get_or_create(user=user)
     return profile
