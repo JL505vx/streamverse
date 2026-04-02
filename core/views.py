@@ -6,7 +6,7 @@ import re
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
-from django.contrib.auth.views import LoginView
+from django.contrib.auth.views import LoginView, LogoutView
 from django.http import FileResponse, Http404, HttpResponse
 from django.db.models import Count, Max, Q, Sum
 from django.db.models.deletion import ProtectedError
@@ -121,6 +121,18 @@ class RoleLoginView(LoginView):
 
 
 class AdminLoginView(RoleLoginView):
+    forced_auth_scope = 'admin'
+
+
+class RoleLogoutView(LogoutView):
+    forced_auth_scope = None
+
+    def dispatch(self, request, *args, **kwargs):
+        request.auth_scope = self.forced_auth_scope or resolve_auth_scope(request)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class AdminLogoutView(RoleLogoutView):
     forced_auth_scope = 'admin'
 
 

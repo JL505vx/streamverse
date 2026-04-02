@@ -1,4 +1,6 @@
-from django.test import SimpleTestCase
+from django.contrib.auth.models import User
+from django.test import Client, SimpleTestCase, TestCase
+from django.urls import reverse
 
 from config.env_utils import build_csrf_trusted_origins
 
@@ -20,3 +22,85 @@ class CsrfTrustedOriginsTests(SimpleTestCase):
 
         self.assertIn('http://*.streamverse.test', origins)
         self.assertIn('https://*.streamverse.test', origins)
+
+
+class AuthFlowTests(TestCase):
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=True)
+        self.common_headers = {
+            'HTTP_HOST': '127.0.0.1:8000',
+            'HTTP_ORIGIN': 'http://127.0.0.1:8000',
+        }
+        self.admin_user = User.objects.create_user(
+            username='adminspec',
+            password='secret12345',
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.user = User.objects.create_user(
+            username='userspec',
+            password='secret12345',
+        )
+
+    def login_admin(self):
+        login_page = self.client.get(reverse('admin_login'), HTTP_HOST='127.0.0.1:8000')
+        csrf_cookie = self.client.cookies['admin_csrftoken'].value
+        response = self.client.post(
+            reverse('admin_login'),
+            {
+                'username': self.admin_user.username,
+                'password': 'secret12345',
+                'auth_scope': 'admin',
+                'csrfmiddlewaretoken': csrf_cookie,
+            },
+            **self.common_headers,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers['Location'], reverse('admin_panel'))
+
+    def login_user(self):
+        login_page = self.client.get(reverse('login'), HTTP_HOST='127.0.0.1:8000')
+        csrf_cookie = self.client.cookies['user_csrftoken'].value
+        response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': 'secret12345',
+                'auth_scope': 'user',
+                'csrfmiddlewaretoken': csrf_cookie,
+            },
+            **self.common_headers,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers['Location'], reverse('user_dashboard'))
+
+    def test_admin_panel_uses_admin_logout_route(self):
+        self.login_admin()
+
+        response = self.client.get(reverse('admin_panel'), HTTP_HOST='127.0.0.1:8000')
+
+        self.assertContains(response, f'action="{reverse("admin_logout")}"')
+        self.assertNotContains(response, f'action="{reverse("logout")}"', html=False)
+
+    def test_admin_logout_accepts_admin_csrf_token(self):
+        self.login_admin()
+        csrf_cookie = self.client.cookies['admin_csrftoken'].value
+
+        response = self.client.post(
+            reverse('admin_logout'),
+            {
+                'auth_scope': 'admin',
+                'csrfmiddlewaretoken': csrf_cookie,
+            },
+            **self.common_headers,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers['Location'], reverse('home'))
+
+    def test_user_dashboard_keeps_regular_logout_route(self):
+        self.login_user()
+
+        response = self.client.get(reverse('user_dashboard'), HTTP_HOST='127.0.0.1:8000')
+
+        self.assertContains(response, f'action="{reverse("logout")}"')

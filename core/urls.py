@@ -1,10 +1,11 @@
-from django.contrib.auth.views import LogoutView
 from django.urls import path
 
 from .forms import StyledAuthenticationForm
 from .views import (
+    AdminLogoutView,
     AdminLoginView,
     RoleLoginView,
+    RoleLogoutView,
     admin_genre_create_view,
     admin_genre_delete_view,
     admin_genre_edit_view,
@@ -35,7 +36,8 @@ urlpatterns = [
         AdminLoginView.as_view(template_name='registration/login.html', authentication_form=StyledAuthenticationForm),
         name='admin_login',
     ),
-    path('logout/', LogoutView.as_view(), name='logout'),
+    path('logout/', RoleLogoutView.as_view(), name='logout'),
+    path('panel-admin/logout/', AdminLogoutView.as_view(), name='admin_logout'),
     path('registro/', signup_view, name='signup'),
     path('dashboard/', user_dashboard_view, name='user_dashboard'),
     path('ajustes/', user_settings_view, name='user_settings'),

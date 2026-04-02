@@ -34,7 +34,7 @@
           <a href="{% url 'user_dashboard' %}">Mi espacio</a>
           <a href="{% url 'user_settings' %}">Ajustes</a>
         {% endif %}
-        <form method="post" action="{% url 'logout' %}" class="logout-form">
+        <form method="post" action="{% if user.is_staff %}{% url 'admin_logout' %}{% else %}{% url 'logout' %}{% endif %}" class="logout-form">
           {% csrf_token %}
           <input type="hidden" name="auth_scope" value="{% if user.is_staff %}admin{% else %}user{% endif %}">
           <button type="submit" class="btn-mini">Salir</button>
