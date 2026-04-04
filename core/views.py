@@ -1,4 +1,5 @@
 from datetime import timedelta
+import logging
 import mimetypes
 import os
 import re
@@ -38,6 +39,58 @@ from .supabase_storage import delete_public_file
 
 
 admin_required = user_passes_test(lambda u: u.is_authenticated and u.is_staff, login_url='admin_login')
+logger = logging.getLogger(__name__)
+
+
+def _movie_has_missing_video(movie):
+    return not movie.video_file_exists
+
+
+def _describe_uploaded_file(uploaded_file):
+    if not uploaded_file:
+        return 'sin archivo'
+    return (
+        f"nombre={getattr(uploaded_file, 'name', '')!r} "
+        f"size={getattr(uploaded_file, 'size', 0)} "
+        f"content_type={getattr(uploaded_file, 'content_type', '')!r}"
+    )
+
+
+def _log_movie_upload_request(request, action_label, movie=None):
+    video_upload = request.FILES.get('video_file')
+    cover_upload = request.FILES.get('cover_file')
+    logger.info(
+        'Upload admin %s movie_id=%s content_type=%s content_length=%s files=%s video=(%s) portada=(%s) media_root=%s',
+        action_label,
+        getattr(movie, 'pk', None),
+        request.META.get('CONTENT_TYPE', ''),
+        request.META.get('CONTENT_LENGTH', ''),
+        list(request.FILES.keys()),
+        _describe_uploaded_file(video_upload),
+        _describe_uploaded_file(cover_upload),
+        settings.MEDIA_ROOT,
+    )
+
+
+def _log_movie_upload_result(action_label, movie):
+    logger.info(
+        'Upload admin %s resultado movie_id=%s title=%r video_url=%r local=%s existe=%s ruta=%s',
+        action_label,
+        movie.pk,
+        movie.title,
+        movie.video_url,
+        movie.video_is_local,
+        movie.video_file_exists,
+        movie.local_video_path,
+    )
+
+
+def _log_invalid_movie_form(action_label, form):
+    logger.warning(
+        'Upload admin %s invalido errors=%s',
+        action_label,
+        form.errors.as_json(),
+    )
 
 
 def media_stream_view(request, path):
@@ -264,6 +317,10 @@ def user_settings_view(request):
 def admin_panel_view(request):
     active_since = timezone.now() - timedelta(hours=24)
     watch_qs = WatchSession.objects.select_related('user', 'movie')
+    catalog_movies = list(Movie.objects.select_related('genre').order_by('-created_at'))
+    missing_video_movies = [movie for movie in catalog_movies if _movie_has_missing_video(movie)]
+    missing_cover_movies = [movie for movie in catalog_movies if not movie.cover_url]
+    draft_total = sum(1 for movie in catalog_movies if not movie.is_published)
 
     top_content = (
         Movie.objects.filter(is_published=True)
@@ -305,10 +362,9 @@ def admin_panel_view(request):
         user_histories.append(item)
     user_histories.sort(key=lambda item: item['last_seen'], reverse=True)
 
-    catalog_total = Movie.objects.count()
-    missing_video_total = Movie.objects.filter(Q(video_url='') | Q(video_url__isnull=True)).count()
-    missing_cover_total = Movie.objects.filter(Q(cover_url='') | Q(cover_url__isnull=True)).count()
-    draft_total = Movie.objects.filter(is_published=False).count()
+    catalog_total = len(catalog_movies)
+    missing_video_total = len(missing_video_movies)
+    missing_cover_total = len(missing_cover_movies)
     complete_total = max(catalog_total - missing_video_total - missing_cover_total - draft_total, 0)
 
     def percent(value):
@@ -316,9 +372,7 @@ def admin_panel_view(request):
             return 0
         return round((value / catalog_total) * 100)
 
-    catalog_needs = Movie.objects.select_related('genre').filter(
-        Q(video_url='') | Q(video_url__isnull=True) | Q(cover_url='') | Q(cover_url__isnull=True)
-    ).order_by('-created_at')[:6]
+    catalog_needs = [movie for movie in catalog_movies if _movie_has_missing_video(movie) or not movie.cover_url][:6]
 
     context = {
         'movie_count': Movie.objects.filter(content_type=Movie.ContentType.MOVIE).count(),
@@ -354,24 +408,29 @@ def admin_panel_view(request):
 def admin_movie_list_view(request):
     missing_video_only = request.GET.get('missing_video') == '1'
     search_query = (request.GET.get('q') or '').strip()
-    movies = Movie.objects.select_related('genre').order_by('-created_at')
-
-    if missing_video_only:
-        movies = movies.filter(Q(video_url='') | Q(video_url__isnull=True))
+    movie_qs = Movie.objects.select_related('genre').order_by('-created_at')
 
     if search_query:
         search_filters = Q(title__icontains=search_query) | Q(genre__name__icontains=search_query) | Q(synopsis__icontains=search_query)
         if search_query.isdigit():
             search_filters |= Q(release_year=int(search_query))
-        movies = movies.filter(search_filters)
+        movie_qs = movie_qs.filter(search_filters)
+
+    movies = list(movie_qs)
+    if missing_video_only:
+        movies = [movie for movie in movies if _movie_has_missing_video(movie)]
+
+    all_movies = list(Movie.objects.select_related('genre').all())
+    missing_video_count = sum(1 for movie in all_movies if _movie_has_missing_video(movie))
+    missing_cover_count = sum(1 for movie in all_movies if not movie.cover_url)
 
     context = {
         'movies': movies,
         'missing_video_only': missing_video_only,
         'search_query': search_query,
-        'total_count': Movie.objects.count(),
-        'missing_video_count': Movie.objects.filter(Q(video_url='') | Q(video_url__isnull=True)).count(),
-        'missing_cover_count': Movie.objects.filter(Q(cover_url='') | Q(cover_url__isnull=True)).count(),
+        'total_count': len(all_movies),
+        'missing_video_count': missing_video_count,
+        'missing_cover_count': missing_cover_count,
     }
     return render(request, 'core/admin/movies_list.html', context)
 
@@ -470,14 +529,20 @@ def admin_movie_bulk_create_view(request):
 @admin_required
 def admin_movie_create_view(request):
     form = MovieAdminForm(request.POST or None, request.FILES or None)
+    if request.method == 'POST':
+        _log_movie_upload_request(request, 'crear')
     if request.method == 'POST' and form.is_valid():
         try:
-            form.save()
+            movie = form.save()
         except Exception as exc:
+            logger.exception('Error guardando contenido nuevo en admin.')
             form.add_error(None, f'No se pudo subir el archivo a Supabase Storage: {exc}')
         else:
+            _log_movie_upload_result('crear', movie)
             messages.success(request, 'Contenido creado correctamente.')
             return redirect('admin_movies')
+    elif request.method == 'POST':
+        _log_invalid_movie_form('crear', form)
     return render(request, 'core/admin/movie_form.html', {'form': form, 'page_title': 'Nuevo contenido'})
 
 
@@ -485,14 +550,20 @@ def admin_movie_create_view(request):
 def admin_movie_edit_view(request, pk):
     movie = get_object_or_404(Movie, pk=pk)
     form = MovieAdminForm(request.POST or None, request.FILES or None, instance=movie)
+    if request.method == 'POST':
+        _log_movie_upload_request(request, 'editar', movie)
     if request.method == 'POST' and form.is_valid():
         try:
-            form.save()
+            movie = form.save()
         except Exception as exc:
+            logger.exception('Error actualizando contenido en admin movie_id=%s.', movie.pk)
             form.add_error(None, f'No se pudo subir el archivo a Supabase Storage: {exc}')
         else:
+            _log_movie_upload_result('editar', movie)
             messages.success(request, 'Contenido actualizado correctamente.')
             return redirect('admin_movies')
+    elif request.method == 'POST':
+        _log_invalid_movie_form('editar', form)
     return render(request, 'core/admin/movie_form.html', {'form': form, 'page_title': 'Editar contenido', 'movie': movie})
 
 
@@ -500,14 +571,20 @@ def admin_movie_edit_view(request, pk):
 def admin_movie_media_view(request, pk):
     movie = get_object_or_404(Movie, pk=pk)
     form = MovieMediaForm(request.POST or None, request.FILES or None, instance=movie)
+    if request.method == 'POST':
+        _log_movie_upload_request(request, 'archivos', movie)
     if request.method == 'POST' and form.is_valid():
         try:
-            form.save()
+            movie = form.save()
         except Exception as exc:
+            logger.exception('Error actualizando archivos de contenido movie_id=%s.', movie.pk)
             form.add_error(None, f'No se pudo subir el archivo a Supabase Storage: {exc}')
         else:
+            _log_movie_upload_result('archivos', movie)
             messages.success(request, 'Archivos de contenido actualizados correctamente.')
             return redirect('admin_movies')
+    elif request.method == 'POST':
+        _log_invalid_movie_form('archivos', form)
 
     return render(request, 'core/admin/movie_media_form.html', {'form': form, 'movie': movie})
 

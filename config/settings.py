@@ -98,10 +98,33 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_URL = (os.getenv('MEDIA_URL', '/media/').strip() or '/media/')
+if not MEDIA_URL.startswith('/'):
+    MEDIA_URL = f'/{MEDIA_URL}'
+if not MEDIA_URL.endswith('/'):
+    MEDIA_URL = f'{MEDIA_URL}/'
+MEDIA_ROOT = Path(os.getenv('MEDIA_ROOT', str(BASE_DIR / 'media'))).expanduser()
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+APP_LOG_LEVEL = os.getenv('APP_LOG_LEVEL', 'INFO').strip().upper() or 'INFO'
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'core': {
+            'handlers': ['console'],
+            'level': APP_LOG_LEVEL,
+            'propagate': False,
+        },
+    },
+}
 
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'user_dashboard'
