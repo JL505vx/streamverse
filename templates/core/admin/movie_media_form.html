@@ -17,7 +17,9 @@
 
 <section class="glass hint-box">
   <p class="muted">Si subes una portada nueva, se reemplaza en Supabase. Si subes un video nuevo, se guarda localmente y se actualiza la URL. Si marcas quitar, se borra la referencia y puedes volver a subir otro.</p>
-  <p class="muted">Estado actual: {% if movie.video_url %}<strong>Video publicado</strong>{% else %}<strong>Sin video</strong>{% endif %}</p>
+  <p class="muted">Estado actual: <strong>{{ movie.video_storage_label }}</strong></p>
+  {% if movie.video_is_local %}<p class="muted">Ruta esperada en este servidor: <strong>{{ movie.local_video_path }}</strong></p>{% endif %}
+  {% if movie.video_is_local and not movie.video_file_exists %}<div class="form-errors">La base de datos apunta a un archivo local que no existe en este servidor.</div>{% endif %}
 </section>
 
 <section class="auth-wrap glass admin-form-shell">
@@ -54,6 +56,7 @@
         <h3>Video</h3>
         {% if movie.video_url %}
           <p class="field-help">Actual por URL: {{ movie.video_url }}</p>
+          {% if movie.video_is_local %}<p class="field-help">Ruta local esperada: {{ movie.local_video_path }}</p>{% endif %}
         {% else %}
           <p class="field-help">Aun no hay video cargado.</p>
         {% endif %}

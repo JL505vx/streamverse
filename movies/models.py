@@ -2,6 +2,8 @@ from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
 
+from core.local_media import local_media_exists, resolve_local_media_path
+
 
 class Genre(models.Model):
     name = models.CharField(max_length=80, unique=True)
@@ -25,7 +27,7 @@ class Movie(models.Model):
     synopsis = models.TextField(blank=True)
     release_year = models.PositiveIntegerField()
     cover_url = models.URLField(blank=True)
-    video_url = models.URLField(blank=True, help_text='URL publica del video en Supabase Storage')
+    video_url = models.URLField(blank=True, help_text='URL publica o ruta local publicada del video')
     is_published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -54,6 +56,31 @@ class Movie(models.Model):
     @property
     def has_video(self):
         return bool(self.video_url)
+
+    @property
+    def video_is_local(self):
+        return bool(resolve_local_media_path(self.video_url))
+
+    @property
+    def local_video_path(self):
+        file_path = resolve_local_media_path(self.video_url)
+        return str(file_path) if file_path else ''
+
+    @property
+    def video_file_exists(self):
+        if not self.video_url:
+            return False
+        if self.video_is_local:
+            return local_media_exists(self.video_url)
+        return True
+
+    @property
+    def video_storage_label(self):
+        if not self.video_url:
+            return 'Sin video'
+        if self.video_is_local:
+            return 'Archivo local' if self.video_file_exists else 'Archivo local faltante'
+        return 'URL externa'
 
 
 class WatchSession(models.Model):

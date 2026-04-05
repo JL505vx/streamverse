@@ -1,8 +1,13 @@
+import tempfile
+from pathlib import Path
+
 from django.contrib.auth.models import User
+from django.test import override_settings
 from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
 
 from config.env_utils import build_csrf_trusted_origins
+from movies.models import Genre, Movie
 
 
 class CsrfTrustedOriginsTests(SimpleTestCase):
@@ -121,3 +126,76 @@ class AuthFlowTests(TestCase):
         response = self.client.get(reverse('user_dashboard'), HTTP_HOST='127.0.0.1:8000')
 
         self.assertContains(response, f'action="{reverse("logout")}"')
+
+
+class LocalVideoStatusTests(TestCase):
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=True)
+        self.common_headers = {
+            'HTTP_HOST': '127.0.0.1:8000',
+            'HTTP_ORIGIN': 'http://127.0.0.1:8000',
+        }
+        self.genre = Genre.objects.create(name='Animacion')
+        self.admin_user = User.objects.create_user(
+            username='catalogadmin',
+            password='secret12345',
+            is_staff=True,
+            is_superuser=True,
+        )
+
+    def login_admin(self):
+        self.client.get(reverse('admin_login'), HTTP_HOST='127.0.0.1:8000')
+        csrf_cookie = self.client.cookies['admin_csrftoken'].value
+        response = self.client.post(
+            reverse('admin_login'),
+            {
+                'username': self.admin_user.username,
+                'password': 'secret12345',
+                'auth_scope': 'admin',
+                'csrfmiddlewaretoken': csrf_cookie,
+            },
+            **self.common_headers,
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def test_movie_marks_missing_local_video_when_file_does_not_exist(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with override_settings(MEDIA_ROOT=temp_dir, MEDIA_URL='/media/'):
+                movie = Movie.objects.create(
+                    title='Valiente',
+                    genre=self.genre,
+                    release_year=2012,
+                    video_url='/media/videos/valiente.mp4',
+                )
+
+                self.assertTrue(movie.video_is_local)
+                self.assertFalse(movie.video_file_exists)
+                self.assertEqual(movie.video_storage_label, 'Archivo local faltante')
+                self.assertEqual(movie.local_video_path, str(Path(temp_dir) / 'videos' / 'valiente.mp4'))
+
+    def test_admin_missing_video_filter_includes_broken_local_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with override_settings(MEDIA_ROOT=temp_dir, MEDIA_URL='/media/'):
+                missing_movie = Movie.objects.create(
+                    title='Valiente',
+                    genre=self.genre,
+                    release_year=2012,
+                    video_url='/media/videos/valiente.mp4',
+                )
+                playable_path = Path(temp_dir) / 'videos'
+                playable_path.mkdir(parents=True, exist_ok=True)
+                (playable_path / 'tarzan.mp4').write_bytes(b'video')
+                Movie.objects.create(
+                    title='Tarzan',
+                    genre=self.genre,
+                    release_year=1999,
+                    video_url='/media/videos/tarzan.mp4',
+                )
+
+                self.login_admin()
+                response = self.client.get(reverse('admin_movies') + '?missing_video=1', HTTP_HOST='127.0.0.1:8000')
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['missing_video_count'], 1)
+                self.assertContains(response, missing_movie.title)
+                self.assertNotContains(response, 'Tarzan')

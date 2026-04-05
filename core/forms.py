@@ -1,6 +1,9 @@
+from pathlib import Path
+
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
+from django.conf import settings
 
 from movies.models import Genre, Movie
 
@@ -145,10 +148,11 @@ class MovieAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         ensure_default_genres()
         super().__init__(*args, **kwargs)
+        video_storage_path = str(Path(settings.MEDIA_ROOT) / 'videos')
         self.fields['genre'].queryset = Genre.objects.order_by('name')
         self.fields['genre'].empty_label = 'Selecciona un genero'
         self.fields['cover_file'].help_text = 'Si subes una portada nueva, se guardara en Supabase Storage.'
-        self.fields['video_file'].help_text = 'Si subes un video nuevo, se guardara en almacenamiento local y se enlazara desde video_url.'
+        self.fields['video_file'].help_text = f'Si subes un video nuevo, se guardara en almacenamiento local ({video_storage_path}) y se enlazara desde video_url.'
 
     def clean_video_file(self):
         video_upload = self.cleaned_data.get('video_file')
@@ -204,8 +208,9 @@ class MovieMediaForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        video_storage_path = str(Path(settings.MEDIA_ROOT) / 'videos')
         self.fields['cover_file'].help_text = 'Sube otra portada y se reemplazara la URL actual.'
-        self.fields['video_file'].help_text = 'Sube otro video y se reemplazara la URL actual en almacenamiento local.'
+        self.fields['video_file'].help_text = f'Sube otro video y se reemplazara la URL actual en almacenamiento local ({video_storage_path}).'
 
     def clean_video_file(self):
         video_upload = self.cleaned_data.get('video_file')

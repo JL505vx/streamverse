@@ -37,7 +37,7 @@
 
 {% if missing_video_only %}
   <section class="glass hint-box">
-    <p class="muted">Mostrando solo contenidos sin video. Usa <strong>Archivos</strong> para subir tu pelicula descargada sin editar el resto.</p>
+    <p class="muted">Mostrando contenidos sin video real: incluye los que no tienen URL y los que apuntan a un archivo local que hoy no existe en este servidor.</p>
   </section>
 {% endif %}
 
@@ -61,7 +61,7 @@
         <td>{{ movie.get_content_type_display }}</td>
         <td>{{ movie.genre.name }}</td>
         <td>{{ movie.release_year }}</td>
-        <td>{% if movie.video_url %}Archivo local / URL{% else %}Sin video{% endif %}</td>
+        <td>{{ movie.video_storage_label }}</td>
         <td>{% if movie.is_published %}Publicado{% else %}Borrador{% endif %}</td>
         <td class="actions">
           <a class="btn-primary" href="{% url 'admin_movie_media' movie.pk %}">Archivos</a>
@@ -92,7 +92,7 @@
     <dl class="catalog-meta-grid">
       <div>
         <dt>Origen</dt>
-        <dd>{% if movie.video_url %}Archivo local / URL{% else %}Sin video{% endif %}</dd>
+        <dd>{{ movie.video_storage_label }}</dd>
       </div>
       <div>
         <dt>Portada</dt>

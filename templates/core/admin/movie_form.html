@@ -28,7 +28,7 @@
     <section class="glass hint-box upload-notes replace-tip">
       <p class="muted"><strong>Corrige archivos desde una sola ruta:</strong> si subiste la pelicula equivocada, entra a <a href="{% url 'admin_movie_media' movie.pk %}"><strong>Archivos</strong></a> para reemplazar o quitar la portada/video actual sin tocar la ficha.</p>
       {% if movie.video_url or movie.cover_url %}
-      <p class="muted">Actual: {% if movie.cover_url %}portada en Supabase{% endif %}{% if movie.cover_url and movie.video_url %} | {% endif %}{% if movie.video_url %}video enlazado{% endif %}</p>
+      <p class="muted">Actual: {% if movie.cover_url %}portada en Supabase{% endif %}{% if movie.cover_url and movie.video_url %} | {% endif %}{% if movie.video_url %}{{ movie.video_storage_label|lower }}{% endif %}</p>
       {% endif %}
     </section>
     {% endif %}
@@ -77,7 +77,11 @@
         {{ form.video_file }}
         {{ form.video_file.errors }}
         {% if form.video_file.help_text %}<small class="field-help">{{ form.video_file.help_text }}</small>{% endif %}
-        {% if movie and movie.video_url %}<small class="field-help">Actual: video enlazado desde URL o almacenamiento local</small>{% endif %}
+        {% if movie and movie.video_url %}
+          <small class="field-help">Actual: {{ movie.video_storage_label }}</small>
+          {% if movie.video_is_local %}<small class="field-help">Ruta esperada en este servidor: {{ movie.local_video_path }}</small>{% endif %}
+          {% if movie.video_is_local and not movie.video_file_exists %}<div class="form-errors">La base de datos apunta a un archivo local que no existe en este servidor.</div>{% endif %}
+        {% endif %}
 
         <label class="inline-check" for="{{ form.is_published.id_for_label }}">{{ form.is_published }} Publicar de inmediato</label>
         {{ form.is_published.errors }}
