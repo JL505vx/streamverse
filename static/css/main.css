@@ -1384,6 +1384,159 @@ h1 {
   padding: 1rem;
 }
 
+.upload-monitor {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0.8rem 0 0.55rem;
+}
+
+.upload-monitor-card,
+.upload-history-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  padding: 0.9rem;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.04), rgba(11, 14, 28, 0.36));
+  display: grid;
+  gap: 0.8rem;
+}
+
+.upload-monitor-head,
+.upload-history-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.upload-monitor-copy,
+.upload-history-copy {
+  margin: 0.25rem 0 0;
+}
+
+.upload-monitor-badge,
+.upload-history-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 8.8rem;
+  padding: 0.38rem 0.72rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  background: rgba(155, 166, 198, 0.12);
+  border: 1px solid rgba(155, 166, 198, 0.18);
+  color: var(--text);
+  text-align: center;
+}
+
+.upload-monitor[data-state="uploading"] .upload-monitor-badge {
+  background: rgba(255, 190, 11, 0.14);
+  border-color: rgba(255, 190, 11, 0.28);
+  color: #ffe8a3;
+}
+
+.upload-monitor[data-state="success"] .upload-monitor-badge,
+.upload-history-card:not(.is-empty) .upload-history-badge {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.26);
+  color: #abefc6;
+}
+
+.upload-monitor[data-state="error"] .upload-monitor-badge {
+  background: rgba(255, 77, 109, 0.14);
+  border-color: rgba(255, 77, 109, 0.26);
+  color: #ffb3c1;
+}
+
+.upload-progress-shell {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.upload-progress-track {
+  width: 100%;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.upload-progress-fill {
+  width: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary), #ff7f50, var(--primary-2));
+  box-shadow: 0 0 24px rgba(255, 127, 80, 0.28);
+  transition: width .22s ease;
+}
+
+.upload-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.upload-progress-meta strong {
+  font-size: 1rem;
+}
+
+.upload-progress-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.upload-stat-chip {
+  border-radius: 14px;
+  padding: 0.68rem 0.72rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.upload-stat-chip span,
+.upload-history-grid dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.upload-stat-chip strong,
+.upload-history-grid dd {
+  margin: 0;
+  font-size: 0.96rem;
+  font-weight: 800;
+}
+
+.upload-progress-status {
+  margin: 0;
+}
+
+.upload-history-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin: 0;
+}
+
+.upload-history-grid > div {
+  border-radius: 14px;
+  padding: 0.72rem 0.76rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.upload-history-card.is-empty .upload-history-badge {
+  background: rgba(155, 166, 198, 0.12);
+  border-color: rgba(155, 166, 198, 0.18);
+  color: var(--muted);
+}
+
 code {
   font-family: Consolas, 'Courier New', monospace;
   font-size: 0.92em;
@@ -2112,6 +2265,23 @@ code {
     flex: 1 1 100%;
     justify-content: center;
     text-align: center;
+  }
+
+  .upload-monitor-head,
+  .upload-history-head,
+  .upload-progress-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .upload-monitor-badge,
+  .upload-history-badge {
+    min-width: auto;
+  }
+
+  .upload-progress-stats,
+  .upload-history-grid {
+    grid-template-columns: 1fr;
   }
 
   .catalog-card {

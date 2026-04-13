@@ -5,6 +5,7 @@ from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.conf import settings
 from django.core.validators import URLValidator
+from django.utils import timezone
 
 from movies.models import Genre, Movie
 
@@ -46,6 +47,28 @@ def clean_media_or_remote_video_url(raw_value: str) -> str:
     validator = URLValidator()
     validator(value)
     return value
+
+
+def _coerce_non_negative_int(raw_value) -> int:
+    try:
+        parsed = int(raw_value or 0)
+    except (TypeError, ValueError):
+        return 0
+    return max(parsed, 0)
+
+
+def _apply_video_upload_metadata(movie, *, filename='', size_bytes=0, duration_ms=0):
+    movie.video_upload_filename = (filename or '')[:255]
+    movie.video_upload_size_bytes = _coerce_non_negative_int(size_bytes)
+    movie.video_upload_duration_ms = _coerce_non_negative_int(duration_ms)
+    movie.video_uploaded_at = timezone.now()
+
+
+def _clear_video_upload_metadata(movie):
+    movie.video_upload_filename = ''
+    movie.video_upload_size_bytes = 0
+    movie.video_upload_duration_ms = 0
+    movie.video_uploaded_at = None
 
 
 class StyledAuthenticationForm(AuthenticationForm):
@@ -127,7 +150,7 @@ class GenreAdminForm(forms.ModelForm):
 class MovieAdminForm(forms.ModelForm):
     video_url = forms.CharField(
         required=False,
-        widget=forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
+        widget=forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'https://... o /media/... (opcional)'}),
     )
     cover_file = forms.FileField(
         required=False,
@@ -137,6 +160,10 @@ class MovieAdminForm(forms.ModelForm):
         required=False,
         widget=forms.FileInput(attrs={'class': 'form-input', 'accept': 'video/*'}),
     )
+    chunk_upload_completed = forms.BooleanField(required=False, widget=forms.HiddenInput())
+    chunk_upload_duration_ms = forms.IntegerField(required=False, widget=forms.HiddenInput())
+    chunk_upload_filename = forms.CharField(required=False, widget=forms.HiddenInput())
+    chunk_upload_size_bytes = forms.IntegerField(required=False, widget=forms.HiddenInput())
 
     class Meta:
         model = Movie
@@ -185,6 +212,10 @@ class MovieAdminForm(forms.ModelForm):
         movie = super().save(commit=False)
         cover_upload = self.cleaned_data.get('cover_file')
         video_upload = self.cleaned_data.get('video_file')
+        chunk_upload_completed = self.cleaned_data.get('chunk_upload_completed')
+        chunk_upload_duration_ms = self.cleaned_data.get('chunk_upload_duration_ms')
+        chunk_upload_filename = self.cleaned_data.get('chunk_upload_filename')
+        chunk_upload_size_bytes = self.cleaned_data.get('chunk_upload_size_bytes')
 
         if cover_upload:
             movie.cover_url = upload_uploaded_file(cover_upload, folder='covers', replace_url=movie.cover_url)
@@ -192,9 +223,25 @@ class MovieAdminForm(forms.ModelForm):
             delete_local_video(self.original_video_url)
             delete_public_file(self.original_video_url)
             movie.video_url = save_uploaded_video_locally(video_upload)
+            _apply_video_upload_metadata(
+                movie,
+                filename=getattr(video_upload, 'name', ''),
+                size_bytes=getattr(video_upload, 'size', 0),
+            )
+        elif chunk_upload_completed and movie.video_url:
+            if movie.video_url != self.original_video_url:
+                delete_local_video(self.original_video_url)
+                delete_public_file(self.original_video_url)
+            _apply_video_upload_metadata(
+                movie,
+                filename=chunk_upload_filename,
+                size_bytes=chunk_upload_size_bytes,
+                duration_ms=chunk_upload_duration_ms,
+            )
         elif movie.video_url != self.original_video_url:
             delete_local_video(self.original_video_url)
             delete_public_file(self.original_video_url)
+            _clear_video_upload_metadata(movie)
 
         if commit:
             movie.save()
@@ -204,7 +251,7 @@ class MovieAdminForm(forms.ModelForm):
 class MovieMediaForm(forms.ModelForm):
     video_url = forms.CharField(
         required=False,
-        widget=forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
+        widget=forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'https://... o /media/... (opcional)'}),
     )
     cover_file = forms.FileField(
         required=False,
@@ -224,6 +271,10 @@ class MovieMediaForm(forms.ModelForm):
         label='Quitar video actual',
         widget=forms.CheckboxInput(attrs={'class': 'form-check'}),
     )
+    chunk_upload_completed = forms.BooleanField(required=False, widget=forms.HiddenInput())
+    chunk_upload_duration_ms = forms.IntegerField(required=False, widget=forms.HiddenInput())
+    chunk_upload_filename = forms.CharField(required=False, widget=forms.HiddenInput())
+    chunk_upload_size_bytes = forms.IntegerField(required=False, widget=forms.HiddenInput())
 
     class Meta:
         model = Movie
@@ -254,6 +305,10 @@ class MovieMediaForm(forms.ModelForm):
         movie = super().save(commit=False)
         cover_upload = self.cleaned_data.get('cover_file')
         video_upload = self.cleaned_data.get('video_file')
+        chunk_upload_completed = self.cleaned_data.get('chunk_upload_completed')
+        chunk_upload_duration_ms = self.cleaned_data.get('chunk_upload_duration_ms')
+        chunk_upload_filename = self.cleaned_data.get('chunk_upload_filename')
+        chunk_upload_size_bytes = self.cleaned_data.get('chunk_upload_size_bytes')
 
         if self.cleaned_data.get('remove_cover_file'):
             delete_public_file(movie.cover_url)
@@ -263,6 +318,7 @@ class MovieMediaForm(forms.ModelForm):
             delete_local_video(movie.video_url)
             delete_public_file(movie.video_url)
             movie.video_url = ''
+            _clear_video_upload_metadata(movie)
 
         if cover_upload:
             movie.cover_url = upload_uploaded_file(cover_upload, folder='covers', replace_url=movie.cover_url)
@@ -271,9 +327,25 @@ class MovieMediaForm(forms.ModelForm):
             delete_local_video(self.original_video_url)
             delete_public_file(self.original_video_url)
             movie.video_url = save_uploaded_video_locally(video_upload)
+            _apply_video_upload_metadata(
+                movie,
+                filename=getattr(video_upload, 'name', ''),
+                size_bytes=getattr(video_upload, 'size', 0),
+            )
+        elif chunk_upload_completed and movie.video_url:
+            if movie.video_url != self.original_video_url:
+                delete_local_video(self.original_video_url)
+                delete_public_file(self.original_video_url)
+            _apply_video_upload_metadata(
+                movie,
+                filename=chunk_upload_filename,
+                size_bytes=chunk_upload_size_bytes,
+                duration_ms=chunk_upload_duration_ms,
+            )
         elif movie.video_url != self.original_video_url:
             delete_local_video(self.original_video_url)
             delete_public_file(self.original_video_url)
+            _clear_video_upload_metadata(movie)
 
         if commit:
             movie.save()

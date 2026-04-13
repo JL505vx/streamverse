@@ -275,3 +275,60 @@ class LocalVideoStatusTests(TestCase):
 
                 self.assertEqual(updated_movie.video_url, '/media/videos/nuevo.mp4')
                 self.assertFalse(old_file.exists())
+
+    def test_movie_media_form_saves_chunk_upload_metadata(self):
+        movie = Movie.objects.create(
+            title='Valiente',
+            genre=self.genre,
+            release_year=2012,
+            video_url='',
+        )
+
+        form = MovieMediaForm(
+            data={
+                'cover_url': '',
+                'video_url': '/media/videos/valiente-final.mp4',
+                'chunk_upload_completed': '1',
+                'chunk_upload_duration_ms': '90500',
+                'chunk_upload_filename': 'Valiente Final.mp4',
+                'chunk_upload_size_bytes': str(734003200),
+            },
+            instance=movie,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        updated_movie = form.save()
+
+        self.assertEqual(updated_movie.video_url, '/media/videos/valiente-final.mp4')
+        self.assertEqual(updated_movie.video_upload_filename, 'Valiente Final.mp4')
+        self.assertEqual(updated_movie.video_upload_size_bytes, 734003200)
+        self.assertEqual(updated_movie.video_upload_duration_ms, 90500)
+        self.assertIsNotNone(updated_movie.video_uploaded_at)
+
+    def test_movie_media_form_clears_upload_metadata_for_external_video_url(self):
+        movie = Movie.objects.create(
+            title='Valiente',
+            genre=self.genre,
+            release_year=2012,
+            video_url='/media/videos/valiente-final.mp4',
+            video_upload_filename='Valiente Final.mp4',
+            video_upload_size_bytes=734003200,
+            video_upload_duration_ms=90500,
+        )
+
+        form = MovieMediaForm(
+            data={
+                'cover_url': '',
+                'video_url': 'https://cdn.example.com/valiente-final.mp4',
+            },
+            instance=movie,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        updated_movie = form.save()
+
+        self.assertEqual(updated_movie.video_url, 'https://cdn.example.com/valiente-final.mp4')
+        self.assertEqual(updated_movie.video_upload_filename, '')
+        self.assertEqual(updated_movie.video_upload_size_bytes, 0)
+        self.assertEqual(updated_movie.video_upload_duration_ms, 0)
+        self.assertIsNone(updated_movie.video_uploaded_at)

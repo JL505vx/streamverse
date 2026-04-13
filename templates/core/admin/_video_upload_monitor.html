@@ -1,0 +1,87 @@
+<section
+  class="upload-monitor"
+  data-upload-monitor
+  data-saved-title="{{ form.instance.title|default:''|escape }}"
+  data-saved-filename="{{ form.instance.video_upload_filename|default:''|escape }}"
+  data-saved-size-bytes="{{ form.instance.video_upload_size_bytes|default:0 }}"
+  data-saved-duration-ms="{{ form.instance.video_upload_duration_ms|default:0 }}"
+  data-saved-uploaded-at="{{ form.instance.video_uploaded_at|date:'c' }}"
+  data-saved-uploaded-at-label="{% if form.instance.video_uploaded_at %}{{ form.instance.video_uploaded_at|date:'d/m/Y H:i' }}{% endif %}"
+>
+  {{ form.chunk_upload_completed }}
+  {{ form.chunk_upload_duration_ms }}
+  {{ form.chunk_upload_filename }}
+  {{ form.chunk_upload_size_bytes }}
+
+  <article class="upload-monitor-card">
+    <div class="upload-monitor-head">
+      <div>
+        <strong>Subida del video</strong>
+        <p class="muted upload-monitor-copy">La subida va en bloques de 5 MB para que tengas mejor control del progreso.</p>
+      </div>
+      <span class="upload-monitor-badge" data-upload-phase>En espera</span>
+    </div>
+
+    <div class="upload-progress-shell">
+      <div class="upload-progress-track" aria-hidden="true">
+        <div class="upload-progress-fill" data-upload-progress-fill></div>
+      </div>
+      <div class="upload-progress-meta">
+        <strong data-upload-percent>0%</strong>
+        <span class="muted" data-upload-chunks>0 / 0 chunks</span>
+      </div>
+    </div>
+
+    <div class="upload-progress-stats">
+      <div class="upload-stat-chip">
+        <span>Tiempo</span>
+        <strong data-upload-elapsed>00:00</strong>
+      </div>
+      <div class="upload-stat-chip">
+        <span>Restante</span>
+        <strong data-upload-remaining>--</strong>
+      </div>
+      <div class="upload-stat-chip">
+        <span>Tamano</span>
+        <strong data-upload-size>--</strong>
+      </div>
+    </div>
+
+    <p class="field-help upload-progress-status" data-upload-status>
+      Selecciona un video y al guardar te mostramos porcentaje, tiempo transcurrido y estado final.
+    </p>
+  </article>
+
+  <article class="upload-history-card{% if not form.instance.has_video_upload_history %} is-empty{% endif %}" data-upload-history-card>
+    <div class="upload-history-head">
+      <div>
+        <strong>Ultima subida registrada</strong>
+        <p class="muted upload-history-copy">Aqui queda el ultimo registro de esta pelicula para que sepas cuando y cuanto tardo.</p>
+      </div>
+      <span class="upload-history-badge" data-upload-history-badge>{% if form.instance.has_video_upload_history %}Registrada{% else %}Sin registro{% endif %}</span>
+    </div>
+
+    <dl class="upload-history-grid">
+      <div>
+        <dt>Pelicula</dt>
+        <dd data-upload-history-title>{% if form.instance.has_video_upload_history %}{{ form.instance.title|default:'Sin titulo' }}{% else %}Sin registro aun{% endif %}</dd>
+      </div>
+      <div>
+        <dt>Archivo</dt>
+        <dd data-upload-history-file>{% if form.instance.has_video_upload_history %}{{ form.instance.video_upload_filename|default:'Sin archivo' }}{% else %}Sin registro aun{% endif %}</dd>
+      </div>
+      <div>
+        <dt>Tamano</dt>
+        <dd data-upload-history-size>{% if form.instance.has_video_upload_history and form.instance.video_upload_size_bytes %}{{ form.instance.video_upload_size_bytes|filesizeformat }}{% else %}--{% endif %}</dd>
+      </div>
+      <div>
+        <dt>Duracion</dt>
+        <dd data-upload-history-duration>{% if form.instance.has_video_upload_history %}{{ form.instance.video_upload_duration_label|default:'--' }}{% else %}--{% endif %}</dd>
+      </div>
+      <div>
+        <dt>Fecha</dt>
+        <dd data-upload-history-date>{% if form.instance.video_uploaded_at %}{{ form.instance.video_uploaded_at|date:'d/m/Y H:i' }}{% else %}--{% endif %}</dd>
+      </div>
+    </dl>
+  </article>
+</section>

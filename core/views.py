@@ -75,7 +75,7 @@ def _log_movie_upload_request(request, action_label, movie=None):
 
 def _log_movie_upload_result(action_label, movie):
     logger.info(
-        'Upload admin %s resultado movie_id=%s title=%r video_url=%r local=%s existe=%s ruta=%s',
+        'Upload admin %s resultado movie_id=%s title=%r video_url=%r local=%s existe=%s ruta=%s upload_file=%r upload_size=%s upload_duration_ms=%s upload_at=%s',
         action_label,
         movie.pk,
         movie.title,
@@ -83,6 +83,10 @@ def _log_movie_upload_result(action_label, movie):
         movie.video_is_local,
         movie.video_file_exists,
         movie.local_video_path,
+        movie.video_upload_filename,
+        movie.video_upload_size_bytes,
+        movie.video_upload_duration_ms,
+        movie.video_uploaded_at,
     )
 
 

@@ -69,6 +69,7 @@
         {{ form.video_file }}
         {{ form.video_file.errors }}
         {% if form.video_file.help_text %}<small class="field-help">{{ form.video_file.help_text }}</small>{% endif %}
+        {% include "core/admin/_video_upload_monitor.html" %}
 
         <label class="inline-check" for="{{ form.remove_video_file.id_for_label }}">{{ form.remove_video_file }} {{ form.remove_video_file.label }}</label>
         {{ form.remove_video_file.errors }}

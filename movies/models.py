@@ -28,6 +28,10 @@ class Movie(models.Model):
     release_year = models.PositiveIntegerField()
     cover_url = models.URLField(blank=True)
     video_url = models.CharField(max_length=200, blank=True, help_text='URL publica o ruta local publicada del video')
+    video_upload_filename = models.CharField(max_length=255, blank=True)
+    video_upload_size_bytes = models.PositiveBigIntegerField(default=0)
+    video_upload_duration_ms = models.PositiveIntegerField(default=0)
+    video_uploaded_at = models.DateTimeField(blank=True, null=True)
     is_published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -81,6 +85,36 @@ class Movie(models.Model):
         if self.video_is_local:
             return 'Archivo local' if self.video_file_exists else 'Archivo local faltante'
         return 'URL externa'
+
+    @property
+    def has_video_upload_history(self):
+        return bool(
+            self.video_upload_filename
+            or self.video_upload_size_bytes
+            or self.video_upload_duration_ms
+            or self.video_uploaded_at
+        )
+
+    @property
+    def video_upload_duration_label(self):
+        total_ms = int(self.video_upload_duration_ms or 0)
+        if total_ms <= 0:
+            return ''
+
+        total_seconds, milliseconds = divmod(total_ms, 1000)
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+
+        parts = []
+        if hours:
+            parts.append(f'{hours} h')
+        if minutes:
+            parts.append(f'{minutes} min')
+        if seconds:
+            parts.append(f'{seconds} s')
+        if not parts and milliseconds:
+            parts.append(f'{milliseconds} ms')
+        return ' '.join(parts)
 
 
 class WatchSession(models.Model):

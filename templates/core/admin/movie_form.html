@@ -77,6 +77,7 @@
         {{ form.video_file }}
         {{ form.video_file.errors }}
         {% if form.video_file.help_text %}<small class="field-help">{{ form.video_file.help_text }}</small>{% endif %}
+        {% include "core/admin/_video_upload_monitor.html" %}
         {% if movie and movie.video_url %}
           <small class="field-help">Actual: {{ movie.video_storage_label }}</small>
           {% if movie.video_is_local %}<small class="field-help">Ruta esperada en este servidor: {{ movie.local_video_path }}</small>{% endif %}

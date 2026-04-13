@@ -10,13 +10,62 @@
     const removeVideoInput = form.querySelector('input[name="remove_video_file"]');
     const csrfInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
     const submitButton = form.querySelector('button[type="submit"]');
+    const titleInput = form.querySelector('input[name="title"]');
     const uploadUrl = form.dataset.chunkUploadUrl;
+    const monitor = form.querySelector('[data-upload-monitor]');
 
-    if (!videoInput || !videoUrlInput || !csrfInput || !uploadUrl) {
+    if (!videoInput || !videoUrlInput || !csrfInput || !uploadUrl || !monitor) {
       return;
     }
 
+    const completedInput = form.querySelector('input[name="chunk_upload_completed"]');
+    const durationInput = form.querySelector('input[name="chunk_upload_duration_ms"]');
+    const filenameInput = form.querySelector('input[name="chunk_upload_filename"]');
+    const sizeInput = form.querySelector('input[name="chunk_upload_size_bytes"]');
+    const phaseEl = monitor.querySelector('[data-upload-phase]');
+    const progressFillEl = monitor.querySelector('[data-upload-progress-fill]');
+    const percentEl = monitor.querySelector('[data-upload-percent]');
+    const chunksEl = monitor.querySelector('[data-upload-chunks]');
+    const elapsedEl = monitor.querySelector('[data-upload-elapsed]');
+    const remainingEl = monitor.querySelector('[data-upload-remaining]');
+    const sizeEl = monitor.querySelector('[data-upload-size]');
+    const statusEl = monitor.querySelector('[data-upload-status]');
+    const historyCard = monitor.querySelector('[data-upload-history-card]');
+    const historyBadgeEl = monitor.querySelector('[data-upload-history-badge]');
+    const historyTitleEl = monitor.querySelector('[data-upload-history-title]');
+    const historyFileEl = monitor.querySelector('[data-upload-history-file]');
+    const historySizeEl = monitor.querySelector('[data-upload-history-size]');
+    const historyDurationEl = monitor.querySelector('[data-upload-history-duration]');
+    const historyDateEl = monitor.querySelector('[data-upload-history-date]');
+
+    if (!completedInput || !durationInput || !filenameInput || !sizeInput) {
+      return;
+    }
+
+    const chunkSize = 5 * 1024 * 1024;
+    const numberFrom = (value) => {
+      const parsed = Number.parseInt(value, 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    };
+    const savedHistory = {
+      title: monitor.dataset.savedTitle || '',
+      filename: monitor.dataset.savedFilename || '',
+      sizeBytes: numberFrom(monitor.dataset.savedSizeBytes),
+      durationMs: numberFrom(monitor.dataset.savedDurationMs),
+      uploadedAtIso: monitor.dataset.savedUploadedAt || '',
+      uploadedAtLabel: monitor.dataset.savedUploadedAtLabel || '',
+    };
+    const savedHistoryHasData = () => Boolean(
+      savedHistory.filename || savedHistory.sizeBytes || savedHistory.durationMs || savedHistory.uploadedAtIso || savedHistory.uploadedAtLabel
+    );
+
     let chunkUploadInFlight = false;
+    let bypassChunkUploadOnce = false;
+    let activeUploadStartedAt = 0;
+    let uploadedBytes = 0;
+    let totalUploadBytes = 0;
+    let elapsedTimer = null;
+    let lastSuccessfulVideoUrl = completedInput.value === '1' ? videoUrlInput.value : '';
 
     const generateUploadId = () => {
       if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -25,7 +74,294 @@
       return `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     };
 
+    const formatBytes = (value) => {
+      const bytes = Math.max(0, Number(value) || 0);
+      if (!bytes) {
+        return '--';
+      }
+
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      let size = bytes;
+      let unitIndex = 0;
+      while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex += 1;
+      }
+      const decimals = size >= 10 || unitIndex === 0 ? 0 : 1;
+      return `${size.toFixed(decimals)} ${units[unitIndex]}`;
+    };
+
+    const formatDuration = (ms) => {
+      const safeMs = Math.max(0, Number(ms) || 0);
+      if (!safeMs) {
+        return '00:00';
+      }
+
+      const totalSeconds = Math.floor(safeMs / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      if (hours > 0) {
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      }
+      return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    };
+
+    const formatDateTime = (isoValue) => {
+      if (!isoValue) {
+        return '--';
+      }
+      const date = new Date(isoValue);
+      if (Number.isNaN(date.getTime())) {
+        return '--';
+      }
+      return new Intl.DateTimeFormat('es-MX', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(date);
+    };
+
+    const getMovieTitle = () => {
+      const typedTitle = titleInput ? titleInput.value.trim() : '';
+      return typedTitle || savedHistory.title || 'Sin titulo';
+    };
+
+    const setMonitorState = (state) => {
+      monitor.dataset.state = state;
+    };
+
+    const setPhase = (label) => {
+      if (phaseEl) {
+        phaseEl.textContent = label;
+      }
+    };
+
+    const updateProgress = ({ percent = 0, chunkIndex = 0, totalChunks = 0, uploaded = 0, total = 0 } = {}) => {
+      const normalizedPercent = Math.max(0, Math.min(100, percent));
+      if (progressFillEl) {
+        progressFillEl.style.width = `${normalizedPercent}%`;
+      }
+      if (percentEl) {
+        percentEl.textContent = `${Math.round(normalizedPercent)}%`;
+      }
+      if (chunksEl) {
+        chunksEl.textContent = totalChunks > 0 ? `${chunkIndex} / ${totalChunks} chunks` : '0 / 0 chunks';
+      }
+      if (sizeEl) {
+        sizeEl.textContent = total > 0 ? `${formatBytes(uploaded)} de ${formatBytes(total)}` : '--';
+      }
+    };
+
+    const stopElapsedTimer = () => {
+      if (elapsedTimer) {
+        window.clearInterval(elapsedTimer);
+        elapsedTimer = null;
+      }
+    };
+
+    const updateElapsedMetrics = () => {
+      if (!activeUploadStartedAt) {
+        if (elapsedEl) {
+          elapsedEl.textContent = '00:00';
+        }
+        if (remainingEl) {
+          remainingEl.textContent = '--';
+        }
+        return;
+      }
+
+      const elapsedMs = Date.now() - activeUploadStartedAt;
+      if (elapsedEl) {
+        elapsedEl.textContent = formatDuration(elapsedMs);
+      }
+
+      if (!remainingEl) {
+        return;
+      }
+
+      if (!uploadedBytes || uploadedBytes >= totalUploadBytes) {
+        remainingEl.textContent = uploadedBytes >= totalUploadBytes && totalUploadBytes > 0 ? '00:00' : '--';
+        return;
+      }
+
+      const speed = uploadedBytes / Math.max(elapsedMs, 1);
+      const remainingMs = speed > 0 ? (totalUploadBytes - uploadedBytes) / speed : 0;
+      remainingEl.textContent = remainingMs > 0 ? formatDuration(remainingMs) : '--';
+    };
+
+    const startElapsedTimer = () => {
+      stopElapsedTimer();
+      updateElapsedMetrics();
+      elapsedTimer = window.setInterval(updateElapsedMetrics, 250);
+    };
+
+    const renderHistory = (snapshot = null) => {
+      const hasHistory = Boolean(snapshot && (snapshot.filename || snapshot.uploadedAtLabel || snapshot.durationMs || snapshot.sizeBytes));
+      historyCard.classList.toggle('is-empty', !hasHistory);
+
+      if (!hasHistory) {
+        historyBadgeEl.textContent = 'Sin registro';
+        historyTitleEl.textContent = 'Sin registro aun';
+        historyFileEl.textContent = 'Sin registro aun';
+        historySizeEl.textContent = '--';
+        historyDurationEl.textContent = '--';
+        historyDateEl.textContent = '--';
+        return;
+      }
+
+      historyBadgeEl.textContent = snapshot.pending ? 'Lista para guardar' : 'Registrada';
+      historyTitleEl.textContent = snapshot.title || 'Sin titulo';
+      historyFileEl.textContent = snapshot.filename || 'Sin archivo';
+      historySizeEl.textContent = snapshot.sizeBytes ? formatBytes(snapshot.sizeBytes) : '--';
+      historyDurationEl.textContent = snapshot.durationMs ? formatDuration(snapshot.durationMs) : '--';
+      historyDateEl.textContent = snapshot.uploadedAtLabel || formatDateTime(snapshot.uploadedAtIso);
+    };
+
+    const getPendingSnapshot = () => {
+      if (completedInput.value !== '1' || !filenameInput.value) {
+        return null;
+      }
+
+      return {
+        title: getMovieTitle(),
+        filename: filenameInput.value,
+        sizeBytes: numberFrom(sizeInput.value),
+        durationMs: numberFrom(durationInput.value),
+        uploadedAtLabel: 'Pendiente de guardar',
+        uploadedAtIso: '',
+        pending: true,
+      };
+    };
+
+    const syncHistoryCard = () => {
+      renderHistory(getPendingSnapshot() || savedHistory);
+    };
+
+    const resetProgressView = () => {
+      activeUploadStartedAt = 0;
+      uploadedBytes = 0;
+      totalUploadBytes = 0;
+      stopElapsedTimer();
+      updateProgress();
+      updateElapsedMetrics();
+    };
+
+    const clearPendingMetadata = () => {
+      completedInput.value = '';
+      durationInput.value = '';
+      filenameInput.value = '';
+      sizeInput.value = '';
+      lastSuccessfulVideoUrl = '';
+      syncHistoryCard();
+    };
+
+    const setStatus = (message, state = 'idle') => {
+      setMonitorState(state);
+      if (statusEl) {
+        statusEl.textContent = message;
+      }
+    };
+
+    const preloadUi = () => {
+      const pendingSnapshot = getPendingSnapshot();
+      if (pendingSnapshot) {
+        setMonitorState('ready');
+        setPhase('Lista para guardar');
+        setStatus('Ya hay un video preparado en esta ficha. Si corriges otro campo, no necesitas volver a subirlo.');
+        updateProgress({
+          percent: 100,
+          chunkIndex: 1,
+          totalChunks: 1,
+          uploaded: pendingSnapshot.sizeBytes,
+          total: pendingSnapshot.sizeBytes,
+        });
+        if (elapsedEl) {
+          elapsedEl.textContent = pendingSnapshot.durationMs ? formatDuration(pendingSnapshot.durationMs) : '00:00';
+        }
+        if (remainingEl) {
+          remainingEl.textContent = '00:00';
+        }
+        if (sizeEl) {
+          sizeEl.textContent = pendingSnapshot.sizeBytes ? formatBytes(pendingSnapshot.sizeBytes) : '--';
+        }
+      } else if (savedHistoryHasData()) {
+        setMonitorState('idle');
+        setPhase('Con historial');
+        setStatus('La pelicula ya tiene una subida registrada. Si reemplazas el video, el historial se actualiza al guardar.');
+        updateProgress({
+          percent: 100,
+          chunkIndex: 1,
+          totalChunks: 1,
+          uploaded: savedHistory.sizeBytes,
+          total: savedHistory.sizeBytes,
+        });
+        if (elapsedEl) {
+          elapsedEl.textContent = savedHistory.durationMs ? formatDuration(savedHistory.durationMs) : '00:00';
+        }
+        if (remainingEl) {
+          remainingEl.textContent = '--';
+        }
+        if (sizeEl) {
+          sizeEl.textContent = savedHistory.sizeBytes ? formatBytes(savedHistory.sizeBytes) : '--';
+        }
+      } else {
+        setMonitorState('idle');
+        setPhase('En espera');
+        setStatus('Selecciona un video y al guardar te mostramos porcentaje, tiempo transcurrido y estado final.');
+        resetProgressView();
+      }
+      syncHistoryCard();
+    };
+
+    videoInput.addEventListener('change', () => {
+      if (videoInput.files.length > 0) {
+        clearPendingMetadata();
+        resetProgressView();
+        setMonitorState('idle');
+        setPhase('Lista para subir');
+        setStatus(`Archivo listo: ${videoInput.files[0].name}. Pulsa guardar para empezar la subida por chunks.`);
+      } else if (!savedHistory.filename) {
+        setPhase('En espera');
+        setStatus('Selecciona un video y al guardar te mostramos porcentaje, tiempo transcurrido y estado final.');
+      }
+    });
+
+    if (removeVideoInput) {
+      removeVideoInput.addEventListener('change', () => {
+        if (removeVideoInput.checked) {
+          clearPendingMetadata();
+          resetProgressView();
+          setMonitorState('idle');
+          setPhase('Video marcado para quitar');
+          setStatus('Quitaste la referencia actual. Si luego eliges otro archivo, esta tarjeta se actualiza sola.');
+        } else {
+          preloadUi();
+        }
+      });
+    }
+
+    videoUrlInput.addEventListener('input', () => {
+      if (chunkUploadInFlight) {
+        return;
+      }
+      if (completedInput.value === '1' && videoUrlInput.value !== lastSuccessfulVideoUrl) {
+        clearPendingMetadata();
+        setMonitorState('idle');
+        setPhase('URL editada');
+        setStatus('Cambiaste la ruta del video manualmente, asi que limpiamos el registro pendiente del upload anterior.');
+      }
+    });
+
     form.addEventListener('submit', async (event) => {
+      if (bypassChunkUploadOnce) {
+        bypassChunkUploadOnce = false;
+        return;
+      }
+
       const file = videoInput.files[0];
       if (!file || chunkUploadInFlight) {
         return;
@@ -37,9 +373,17 @@
         submitButton.disabled = true;
       }
 
-      const chunkSize = 5 * 1024 * 1024;
       const totalChunks = Math.ceil(file.size / chunkSize);
       const uploadId = generateUploadId();
+      activeUploadStartedAt = Date.now();
+      uploadedBytes = 0;
+      totalUploadBytes = file.size;
+
+      setMonitorState('uploading');
+      setPhase('Subiendo');
+      setStatus(`Subiendo ${file.name} en ${totalChunks} partes. No cierres esta ventana hasta que termine.`);
+      updateProgress({ percent: 0, chunkIndex: 0, totalChunks, uploaded: 0, total: file.size });
+      startElapsedTimer();
 
       try {
         console.log(`Iniciando subida por chunks: ${file.name} (${totalChunks} chunks)`);
@@ -72,7 +416,17 @@
             throw new Error(result.error || `Fallo el chunk ${chunkIndex + 1}.`);
           }
 
-          console.log(`Chunk ${chunkIndex + 1}/${totalChunks} subido`);
+          uploadedBytes = end;
+          updateProgress({
+            percent: (uploadedBytes / file.size) * 100,
+            chunkIndex: chunkIndex + 1,
+            totalChunks,
+            uploaded: uploadedBytes,
+            total: file.size,
+          });
+          updateElapsedMetrics();
+          console.log(`Chunk ${chunkIndex + 1}/${totalChunks} subido (${Math.round((uploadedBytes / file.size) * 100)}%)`);
+
           if (result.video_url) {
             uploadedVideoUrl = result.video_url;
           }
@@ -82,22 +436,59 @@
           throw new Error('El servidor no devolvio la URL final del video.');
         }
 
+        const elapsedMs = Date.now() - activeUploadStartedAt;
+        completedInput.value = '1';
+        durationInput.value = String(elapsedMs);
+        filenameInput.value = file.name;
+        sizeInput.value = String(file.size);
         videoUrlInput.value = uploadedVideoUrl;
         videoInput.value = '';
+        lastSuccessfulVideoUrl = uploadedVideoUrl;
+
         if (removeVideoInput) {
           removeVideoInput.checked = false;
         }
 
+        stopElapsedTimer();
+        uploadedBytes = file.size;
+        updateProgress({
+          percent: 100,
+          chunkIndex: totalChunks,
+          totalChunks,
+          uploaded: file.size,
+          total: file.size,
+        });
+        updateElapsedMetrics();
+        setMonitorState('success');
+        setPhase('Lista para guardar');
+        setStatus(`Video subido correctamente en ${formatDuration(elapsedMs)}. Ahora solo falta guardar la ficha para registrar el historial.`);
+        syncHistoryCard();
+
         console.log(`Video ensamblado correctamente: ${uploadedVideoUrl}`);
-        form.submit();
-      } catch (error) {
-        console.error('Error subiendo video por chunks', error);
-        window.alert(error.message || 'No se pudo subir el video por chunks.');
         chunkUploadInFlight = false;
         if (submitButton) {
           submitButton.disabled = false;
         }
+        bypassChunkUploadOnce = true;
+        if (typeof form.requestSubmit === 'function') {
+          form.requestSubmit(submitButton || undefined);
+        } else {
+          form.submit();
+        }
+      } catch (error) {
+        stopElapsedTimer();
+        chunkUploadInFlight = false;
+        if (submitButton) {
+          submitButton.disabled = false;
+        }
+        setMonitorState('error');
+        setPhase('Error');
+        setStatus(error.message || 'No se pudo subir el video por chunks.');
+        console.error('Error subiendo video por chunks', error);
+        window.alert(error.message || 'No se pudo subir el video por chunks.');
       }
     });
+
+    preloadUi();
   })();
 </script>
