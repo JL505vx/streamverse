@@ -21,6 +21,7 @@ from .views import (
     admin_user_edit_view,
     admin_user_list_view,
     signup_view,
+    upload_chunk_view,
     user_dashboard_view,
     user_settings_view,
 )
@@ -38,6 +39,7 @@ urlpatterns = [
     ),
     path('logout/', RoleLogoutView.as_view(), name='logout'),
     path('panel-admin/logout/', AdminLogoutView.as_view(), name='admin_logout'),
+    path('upload-chunk/', upload_chunk_view, name='upload_chunk'),
     path('registro/', signup_view, name='signup'),
     path('dashboard/', user_dashboard_view, name='user_dashboard'),
     path('ajustes/', user_settings_view, name='user_settings'),

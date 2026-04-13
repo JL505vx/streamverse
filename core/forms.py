@@ -4,6 +4,7 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.conf import settings
+from django.core.validators import URLValidator
 
 from movies.models import Genre, Movie
 
@@ -34,6 +35,17 @@ def ensure_default_genres():
     missing = [Genre(name=name) for name in COMMON_GENRES if name not in existing]
     if missing:
         Genre.objects.bulk_create(missing, ignore_conflicts=True)
+
+
+def clean_media_or_remote_video_url(raw_value: str) -> str:
+    value = (raw_value or '').strip()
+    if not value:
+        return ''
+    if value.startswith(settings.MEDIA_URL):
+        return value
+    validator = URLValidator()
+    validator(value)
+    return value
 
 
 class StyledAuthenticationForm(AuthenticationForm):
@@ -113,6 +125,10 @@ class GenreAdminForm(forms.ModelForm):
 
 
 class MovieAdminForm(forms.ModelForm):
+    video_url = forms.CharField(
+        required=False,
+        widget=forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
+    )
     cover_file = forms.FileField(
         required=False,
         widget=forms.FileInput(attrs={'class': 'form-input', 'accept': 'image/*'}),
@@ -141,13 +157,13 @@ class MovieAdminForm(forms.ModelForm):
             'synopsis': forms.Textarea(attrs={'class': 'form-input', 'rows': 4, 'placeholder': 'Descripcion corta'}),
             'release_year': forms.NumberInput(attrs={'class': 'form-input', 'placeholder': '2026'}),
             'cover_url': forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
-            'video_url': forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
             'is_published': forms.CheckboxInput(attrs={'class': 'form-check'}),
         }
 
     def __init__(self, *args, **kwargs):
         ensure_default_genres()
         super().__init__(*args, **kwargs)
+        self.original_video_url = self.instance.video_url if self.instance and self.instance.pk else ''
         video_storage_path = str(Path(settings.MEDIA_ROOT) / 'videos')
         self.fields['genre'].queryset = Genre.objects.order_by('name')
         self.fields['genre'].empty_label = 'Selecciona un genero'
@@ -162,6 +178,9 @@ class MovieAdminForm(forms.ModelForm):
             raise forms.ValidationError('Los videos grandes deben cargarse por URL o almacenamiento local')
         return video_upload
 
+    def clean_video_url(self):
+        return clean_media_or_remote_video_url(self.cleaned_data.get('video_url'))
+
     def save(self, commit=True):
         movie = super().save(commit=False)
         cover_upload = self.cleaned_data.get('cover_file')
@@ -170,8 +189,12 @@ class MovieAdminForm(forms.ModelForm):
         if cover_upload:
             movie.cover_url = upload_uploaded_file(cover_upload, folder='covers', replace_url=movie.cover_url)
         if video_upload:
-            delete_local_video(movie.video_url)
+            delete_local_video(self.original_video_url)
+            delete_public_file(self.original_video_url)
             movie.video_url = save_uploaded_video_locally(video_upload)
+        elif movie.video_url != self.original_video_url:
+            delete_local_video(self.original_video_url)
+            delete_public_file(self.original_video_url)
 
         if commit:
             movie.save()
@@ -179,6 +202,10 @@ class MovieAdminForm(forms.ModelForm):
 
 
 class MovieMediaForm(forms.ModelForm):
+    video_url = forms.CharField(
+        required=False,
+        widget=forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
+    )
     cover_file = forms.FileField(
         required=False,
         widget=forms.FileInput(attrs={'class': 'form-input', 'accept': 'image/*'}),
@@ -203,11 +230,11 @@ class MovieMediaForm(forms.ModelForm):
         fields = ['cover_url', 'video_url']
         widgets = {
             'cover_url': forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
-            'video_url': forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.original_video_url = self.instance.video_url if self.instance and self.instance.pk else ''
         video_storage_path = str(Path(settings.MEDIA_ROOT) / 'videos')
         self.fields['cover_file'].help_text = 'Sube otra portada y se reemplazara la URL actual.'
         self.fields['video_file'].help_text = f'Sube otro video y se reemplazara la URL actual en almacenamiento local ({video_storage_path}).'
@@ -219,6 +246,9 @@ class MovieMediaForm(forms.ModelForm):
         if video_upload.size > get_local_video_max_bytes():
             raise forms.ValidationError('Los videos grandes deben cargarse por URL o almacenamiento local')
         return video_upload
+
+    def clean_video_url(self):
+        return clean_media_or_remote_video_url(self.cleaned_data.get('video_url'))
 
     def save(self, commit=True):
         movie = super().save(commit=False)
@@ -238,9 +268,12 @@ class MovieMediaForm(forms.ModelForm):
             movie.cover_url = upload_uploaded_file(cover_upload, folder='covers', replace_url=movie.cover_url)
 
         if video_upload:
-            delete_local_video(movie.video_url)
-            delete_public_file(movie.video_url)
+            delete_local_video(self.original_video_url)
+            delete_public_file(self.original_video_url)
             movie.video_url = save_uploaded_video_locally(video_upload)
+        elif movie.video_url != self.original_video_url:
+            delete_local_video(self.original_video_url)
+            delete_public_file(self.original_video_url)
 
         if commit:
             movie.save()

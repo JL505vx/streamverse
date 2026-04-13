@@ -27,7 +27,7 @@ class Movie(models.Model):
     synopsis = models.TextField(blank=True)
     release_year = models.PositiveIntegerField()
     cover_url = models.URLField(blank=True)
-    video_url = models.URLField(blank=True, help_text='URL publica o ruta local publicada del video')
+    video_url = models.CharField(max_length=200, blank=True, help_text='URL publica o ruta local publicada del video')
     is_published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

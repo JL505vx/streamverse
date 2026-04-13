@@ -17,7 +17,7 @@
 </section>
 
 <section class="glass admin-form-shell">
-  <form method="post" enctype="multipart/form-data" class="auth-form">
+  <form method="post" enctype="multipart/form-data" class="auth-form" data-chunk-upload-form data-chunk-upload-url="{% url 'upload_chunk' %}">
     {% csrf_token %}
 
     {% if form.non_field_errors %}
@@ -103,4 +103,7 @@
     </div>
   </form>
 </section>
+{% endblock %}
+{% block extra_scripts %}
+  {% include "core/admin/_chunked_video_upload.html" %}
 {% endblock %}

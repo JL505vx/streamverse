@@ -1,7 +1,7 @@
 from urllib.parse import urlparse
 
 
-ADMIN_PATH_PREFIXES = ('/admin', '/cuenta/panel-admin')
+ADMIN_PATH_PREFIXES = ('/admin', '/cuenta/panel-admin', '/cuenta/upload-chunk')
 
 
 def is_admin_path(path: str) -> bool:

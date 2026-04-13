@@ -2,11 +2,13 @@ import tempfile
 from pathlib import Path
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
 
 from config.env_utils import build_csrf_trusted_origins
+from core.forms import MovieMediaForm
 from movies.models import Genre, Movie
 
 
@@ -199,3 +201,77 @@ class LocalVideoStatusTests(TestCase):
                 self.assertEqual(response.context['missing_video_count'], 1)
                 self.assertContains(response, missing_movie.title)
                 self.assertNotContains(response, 'Tarzan')
+
+    def test_upload_chunk_endpoint_assembles_video(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with override_settings(MEDIA_ROOT=temp_dir, MEDIA_URL='/media/'):
+                self.login_admin()
+                upload_id = 'chunk-upload-test'
+                filename = 'valiente.mp4'
+                csrf_cookie = self.client.cookies['admin_csrftoken'].value
+
+                response = self.client.post(
+                    reverse('upload_chunk'),
+                    {
+                        'file': SimpleUploadedFile('chunk-0.part', b'abc123'),
+                        'chunk': '0',
+                        'filename': filename,
+                        'total_chunks': '2',
+                        'upload_id': upload_id,
+                    },
+                    HTTP_X_CSRFTOKEN=csrf_cookie,
+                    **self.common_headers,
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertJSONEqual(response.content, {'ok': True, 'chunk': 0, 'complete': False, 'video_url': ''})
+
+                response = self.client.post(
+                    reverse('upload_chunk'),
+                    {
+                        'file': SimpleUploadedFile('chunk-1.part', b'def456'),
+                        'chunk': '1',
+                        'filename': filename,
+                        'total_chunks': '2',
+                        'upload_id': upload_id,
+                    },
+                    HTTP_X_CSRFTOKEN=csrf_cookie,
+                    **self.common_headers,
+                )
+                self.assertEqual(response.status_code, 200)
+                payload = response.json()
+                self.assertTrue(payload['ok'])
+                self.assertTrue(payload['complete'])
+                self.assertTrue(payload['video_url'].startswith('/media/videos/'))
+
+                final_path = Path(temp_dir) / payload['video_url'].removeprefix('/media/')
+                self.assertTrue(final_path.exists())
+                self.assertEqual(final_path.read_bytes(), b'abc123def456')
+
+    def test_movie_media_form_replaces_old_local_video_when_video_url_changes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with override_settings(MEDIA_ROOT=temp_dir, MEDIA_URL='/media/'):
+                videos_dir = Path(temp_dir) / 'videos'
+                videos_dir.mkdir(parents=True, exist_ok=True)
+                old_file = videos_dir / 'viejo.mp4'
+                old_file.write_bytes(b'old-video')
+
+                movie = Movie.objects.create(
+                    title='Valiente',
+                    genre=self.genre,
+                    release_year=2012,
+                    video_url='/media/videos/viejo.mp4',
+                )
+
+                form = MovieMediaForm(
+                    data={
+                        'cover_url': '',
+                        'video_url': '/media/videos/nuevo.mp4',
+                    },
+                    instance=movie,
+                )
+
+                self.assertTrue(form.is_valid(), form.errors)
+                updated_movie = form.save()
+
+                self.assertEqual(updated_movie.video_url, '/media/videos/nuevo.mp4')
+                self.assertFalse(old_file.exists())

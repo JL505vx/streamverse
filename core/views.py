@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView, LogoutView
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.db.models import Count, Max, Q, Sum
 from django.db.models.deletion import ProtectedError
 from django.db.models.functions import Coalesce
@@ -18,6 +18,7 @@ from django.utils._os import safe_join
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.conf import settings
+from django.views.decorators.http import require_POST
 
 from movies.models import Favorite, Genre, Movie, PlaybackProgress, WatchSession
 
@@ -34,7 +35,7 @@ from .forms import (
 )
 from .models import UserProfile
 from .session_scopes import resolve_auth_scope
-from .local_media import delete_local_video
+from .local_media import append_chunk_to_upload, delete_local_video, finalize_chunk_upload
 from .supabase_storage import delete_public_file
 
 
@@ -131,6 +132,55 @@ def media_stream_view(request, path):
     response['Content-Range'] = f'bytes {start}-{end}/{file_size}'
     response['Accept-Ranges'] = 'bytes'
     return response
+
+
+@require_POST
+def upload_chunk_view(request):
+    if not request.user.is_authenticated or not request.user.is_staff:
+        return JsonResponse({'ok': False, 'error': 'No autorizado.'}, status=403)
+
+    uploaded_chunk = request.FILES.get('file')
+    filename = (request.POST.get('filename') or '').strip()
+    upload_id = (request.POST.get('upload_id') or '').strip()
+
+    try:
+        chunk_index = int(request.POST.get('chunk', '0'))
+        total_chunks = int(request.POST.get('total_chunks', '0'))
+    except ValueError:
+        return JsonResponse({'ok': False, 'error': 'Datos de chunk invalidos.'}, status=400)
+
+    if not uploaded_chunk or not filename or not upload_id:
+        return JsonResponse({'ok': False, 'error': 'Faltan datos del chunk.'}, status=400)
+    if chunk_index < 0 or total_chunks <= 0:
+        return JsonResponse({'ok': False, 'error': 'Configuracion de chunks invalida.'}, status=400)
+
+    try:
+        append_chunk_to_upload(upload_id, filename, uploaded_chunk, chunk_index)
+        is_last_chunk = chunk_index >= total_chunks - 1
+        video_url = finalize_chunk_upload(upload_id, filename) if is_last_chunk else ''
+    except FileNotFoundError as exc:
+        logger.warning('Upload chunk incompleto upload_id=%s chunk=%s error=%s', upload_id, chunk_index, exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+    except Exception as exc:
+        logger.exception('Error procesando upload por chunks upload_id=%s chunk=%s', upload_id, chunk_index)
+        return JsonResponse({'ok': False, 'error': f'No se pudo procesar el chunk: {exc}'}, status=500)
+
+    logger.info(
+        'Chunk procesado upload_id=%s chunk=%s/%s completo=%s video_url=%s',
+        upload_id,
+        chunk_index + 1,
+        total_chunks,
+        is_last_chunk,
+        video_url,
+    )
+    return JsonResponse(
+        {
+            'ok': True,
+            'chunk': chunk_index,
+            'complete': is_last_chunk,
+            'video_url': video_url,
+        }
+    )
 
 
 class RoleLoginView(LoginView):

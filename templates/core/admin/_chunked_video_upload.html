@@ -1,0 +1,103 @@
+<script>
+  (() => {
+    const form = document.querySelector('[data-chunk-upload-form]');
+    if (!form) {
+      return;
+    }
+
+    const videoInput = form.querySelector('input[name="video_file"]');
+    const videoUrlInput = form.querySelector('input[name="video_url"]');
+    const removeVideoInput = form.querySelector('input[name="remove_video_file"]');
+    const csrfInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
+    const submitButton = form.querySelector('button[type="submit"]');
+    const uploadUrl = form.dataset.chunkUploadUrl;
+
+    if (!videoInput || !videoUrlInput || !csrfInput || !uploadUrl) {
+      return;
+    }
+
+    let chunkUploadInFlight = false;
+
+    const generateUploadId = () => {
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        return window.crypto.randomUUID();
+      }
+      return `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    };
+
+    form.addEventListener('submit', async (event) => {
+      const file = videoInput.files[0];
+      if (!file || chunkUploadInFlight) {
+        return;
+      }
+
+      event.preventDefault();
+      chunkUploadInFlight = true;
+      if (submitButton) {
+        submitButton.disabled = true;
+      }
+
+      const chunkSize = 5 * 1024 * 1024;
+      const totalChunks = Math.ceil(file.size / chunkSize);
+      const uploadId = generateUploadId();
+
+      try {
+        console.log(`Iniciando subida por chunks: ${file.name} (${totalChunks} chunks)`);
+        let uploadedVideoUrl = '';
+
+        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+          const start = chunkIndex * chunkSize;
+          const end = Math.min(start + chunkSize, file.size);
+          const chunkBlob = file.slice(start, end);
+          const payload = new FormData();
+
+          payload.append('file', chunkBlob, file.name);
+          payload.append('chunk', String(chunkIndex));
+          payload.append('filename', file.name);
+          payload.append('total_chunks', String(totalChunks));
+          payload.append('upload_id', uploadId);
+
+          const response = await fetch(uploadUrl, {
+            method: 'POST',
+            body: payload,
+            headers: {
+              'X-CSRFToken': csrfInput.value,
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+          });
+
+          const result = await response.json().catch(() => ({ ok: false, error: 'Respuesta invalida del servidor.' }));
+          if (!response.ok || !result.ok) {
+            throw new Error(result.error || `Fallo el chunk ${chunkIndex + 1}.`);
+          }
+
+          console.log(`Chunk ${chunkIndex + 1}/${totalChunks} subido`);
+          if (result.video_url) {
+            uploadedVideoUrl = result.video_url;
+          }
+        }
+
+        if (!uploadedVideoUrl) {
+          throw new Error('El servidor no devolvio la URL final del video.');
+        }
+
+        videoUrlInput.value = uploadedVideoUrl;
+        videoInput.value = '';
+        if (removeVideoInput) {
+          removeVideoInput.checked = false;
+        }
+
+        console.log(`Video ensamblado correctamente: ${uploadedVideoUrl}`);
+        form.submit();
+      } catch (error) {
+        console.error('Error subiendo video por chunks', error);
+        window.alert(error.message || 'No se pudo subir el video por chunks.');
+        chunkUploadInFlight = false;
+        if (submitButton) {
+          submitButton.disabled = false;
+        }
+      }
+    });
+  })();
+</script>
