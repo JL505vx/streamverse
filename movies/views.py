@@ -1,13 +1,26 @@
 import json
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.http import require_POST
 
-from .models import Favorite, Movie, PlaybackProgress, WatchSession
+from .models import Favorite, Movie, PlaybackProgress, WatchParty, WatchPartyMember, WatchSession
+from .watch_party import (
+    get_watch_party_messages,
+    mark_watch_party_member_disconnected,
+    serialize_watch_party,
+    serialize_watch_party_message,
+    touch_watch_party_member,
+    user_can_control_watch_party,
+    user_is_in_watch_party,
+)
 
 
 def _detect_device_info(user_agent: str):
@@ -114,6 +127,49 @@ def _build_latest_movie_card(movie):
     }
 
 
+def _load_json_payload(request):
+    try:
+        return json.loads(request.body.decode('utf-8') or '{}')
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
+def _serialize_watch_party_payload(party, user, request):
+    return {
+        'party': serialize_watch_party(party, user=user, request=request),
+        'messages': [
+            serialize_watch_party_message(message, current_user=user)
+            for message in get_watch_party_messages(party)
+        ],
+    }
+
+
+def _broadcast_watch_party_event(party, event_name, message_id=None):
+    channel_layer = get_channel_layer()
+    if not channel_layer:
+        return
+
+    payload = {
+        'type': 'party.event',
+        'event_name': event_name,
+        'code': party.code,
+        'movie_slug': party.movie.slug,
+    }
+    if message_id:
+        payload['message_id'] = message_id
+
+    async_to_sync(channel_layer.group_send)(f'watch_party_{party.code}', payload)
+
+
+def _resolve_watch_party(movie, code):
+    return get_object_or_404(
+        WatchParty.objects.select_related('movie', 'host', 'last_action_by'),
+        movie=movie,
+        code=(code or '').strip().upper(),
+        is_active=True,
+    )
+
+
 def home_view(request):
     published_movies = Movie.objects.filter(is_published=True).select_related('genre')
     query = (request.GET.get('q') or '').strip()
@@ -178,6 +234,14 @@ def movie_detail_view(request, slug):
 
     progress = PlaybackProgress.objects.filter(user=request.user, movie=movie).first()
     resume_seconds = progress.progress_seconds if progress else 0
+    existing_party = (
+        WatchParty.objects.select_related('host', 'last_action_by')
+        .filter(movie=movie, is_active=True)
+        .filter(Q(host=request.user) | Q(members__user=request.user))
+        .distinct()
+        .first()
+    )
+    initial_party_code = ((request.GET.get('party') or '') or (existing_party.code if existing_party else '')).strip().upper()
 
     related_movies = (
         Movie.objects.filter(is_published=True, genre=movie.genre)
@@ -193,6 +257,8 @@ def movie_detail_view(request, slug):
         'is_favorite': is_favorite,
         'resume_seconds': resume_seconds,
         'resume_label': _format_clock(resume_seconds),
+        'watch_party_bootstrap': _serialize_watch_party_payload(existing_party, request.user, request) if existing_party else None,
+        'initial_party_code': initial_party_code,
     }
     return render(request, 'movies/movie_detail.html', context)
 
@@ -248,3 +314,102 @@ def update_progress_view(request, slug):
     progress.save(update_fields=['progress_seconds', 'duration_seconds', 'completed', 'last_watched'])
 
     return JsonResponse({'ok': True, 'completed': completed, 'resume_label': _format_clock(progress_seconds)})
+
+
+@login_required
+@require_POST
+def create_watch_party_view(request, slug):
+    movie = get_object_or_404(Movie, slug=slug, is_published=True)
+    party = WatchParty.objects.filter(movie=movie, host=request.user, is_active=True).first()
+
+    if not party:
+        party = WatchParty.objects.create(movie=movie, host=request.user, last_action_by=request.user)
+
+    touch_watch_party_member(party, request.user, is_connected=False)
+    payload = _serialize_watch_party_payload(party, request.user, request)
+    return JsonResponse({'ok': True, **payload})
+
+
+@login_required
+@require_POST
+def join_watch_party_view(request, slug):
+    movie = get_object_or_404(Movie, slug=slug, is_published=True)
+    payload = _load_json_payload(request)
+    if payload is None:
+        return JsonResponse({'ok': False, 'error': 'invalid_json'}, status=400)
+
+    code = (payload.get('code') or '').strip().upper()
+    if not code:
+        return JsonResponse({'ok': False, 'error': 'missing_code'}, status=400)
+
+    party = _resolve_watch_party(movie, code)
+    touch_watch_party_member(party, request.user, is_connected=False)
+    return JsonResponse({'ok': True, **_serialize_watch_party_payload(party, request.user, request)})
+
+
+@login_required
+def watch_party_state_view(request, slug, code):
+    movie = get_object_or_404(Movie, slug=slug, is_published=True)
+    party = _resolve_watch_party(movie, code)
+    if not user_is_in_watch_party(party, request.user):
+        return JsonResponse({'ok': False, 'error': 'not_joined'}, status=403)
+
+    touch_watch_party_member(party, request.user, is_connected=False)
+    return JsonResponse({'ok': True, **_serialize_watch_party_payload(party, request.user, request)})
+
+
+@login_required
+@require_POST
+def watch_party_sync_view(request, slug, code):
+    movie = get_object_or_404(Movie, slug=slug, is_published=True)
+    party = _resolve_watch_party(movie, code)
+    if not user_can_control_watch_party(party, request.user):
+        return JsonResponse({'ok': False, 'error': 'host_only'}, status=403)
+
+    payload = _load_json_payload(request)
+    if payload is None:
+        return JsonResponse({'ok': False, 'error': 'invalid_json'}, status=400)
+
+    try:
+        current_time_seconds = max(0, float(payload.get('current_time_seconds', 0) or 0))
+    except (TypeError, ValueError):
+        return JsonResponse({'ok': False, 'error': 'invalid_time'}, status=400)
+
+    playback_state = payload.get('playback_state')
+    if playback_state not in {
+        WatchParty.PlaybackState.PAUSED,
+        WatchParty.PlaybackState.PLAYING,
+    }:
+        return JsonResponse({'ok': False, 'error': 'invalid_state'}, status=400)
+
+    party.playback_state = playback_state
+    party.current_time_seconds = current_time_seconds
+    party.last_action_by = request.user
+    party.save(update_fields=['playback_state', 'current_time_seconds', 'last_action_by', 'last_action_at'])
+    touch_watch_party_member(party, request.user, is_connected=False)
+    _broadcast_watch_party_event(party, 'party.state')
+    return JsonResponse({'ok': True, **_serialize_watch_party_payload(party, request.user, request)})
+
+
+@login_required
+@require_POST
+def leave_watch_party_view(request, slug, code):
+    movie = get_object_or_404(Movie, slug=slug, is_published=True)
+    party = _resolve_watch_party(movie, code)
+    if not user_is_in_watch_party(party, request.user):
+        return JsonResponse({'ok': False, 'error': 'not_joined'}, status=403)
+
+    closed = False
+    if party.host_id == request.user.id:
+        party.is_active = False
+        party.last_action_by = request.user
+        party.save(update_fields=['is_active', 'last_action_by', 'last_action_at'])
+        party.members.update(is_connected=False, last_seen=timezone.now())
+        closed = True
+        _broadcast_watch_party_event(party, 'party.closed')
+    else:
+        mark_watch_party_member_disconnected(party, request.user)
+        WatchPartyMember.objects.filter(party=party, user=request.user).delete()
+        _broadcast_watch_party_event(party, 'party.presence')
+
+    return JsonResponse({'ok': True, 'closed': closed})

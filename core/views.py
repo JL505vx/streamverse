@@ -98,6 +98,59 @@ def _log_invalid_movie_form(action_label, form):
     )
 
 
+def _build_member_greeting(current_time):
+    hour = current_time.hour
+    if 5 <= hour < 12:
+        return (
+            'Buenos dias',
+            'Luces suaves, algo rico para desayunar y una peli lista para arrancar sin prisas.',
+        )
+    if 12 <= hour < 19:
+        return (
+            'Buenas tardes',
+            'Tu sala ya esta encendida para seguir donde te quedaste o descubrir algo nuevo.',
+        )
+    return (
+        'Buenas noches',
+        'Todo esta listo para una sesion larga: ambiente oscuro, atajos a mano y tu fila esperandote.',
+    )
+
+
+def _format_watch_runtime(total_seconds):
+    total_seconds = max(int(total_seconds or 0), 0)
+    if total_seconds <= 0:
+        return 'Aun no hay tiempo acumulado'
+
+    total_minutes, _ = divmod(total_seconds, 60)
+    hours, minutes = divmod(total_minutes, 60)
+
+    if hours and minutes:
+        return f'{hours} h {minutes} min de avance guardado'
+    if hours:
+        return f'{hours} h de avance guardado'
+    return f'{max(total_minutes, 1)} min de avance guardado'
+
+
+def _format_relative_label(timestamp):
+    if not timestamp:
+        return 'Sin reproducciones recientes'
+
+    delta = timezone.localtime() - timezone.localtime(timestamp)
+    minutes = max(int(delta.total_seconds() // 60), 0)
+
+    if minutes < 1:
+        return 'Activo justo ahora'
+    if minutes < 60:
+        return f'Activo hace {minutes} min'
+
+    hours = minutes // 60
+    if hours < 24:
+        return f'Activo hace {hours} h'
+
+    days = hours // 24
+    return f'Activo hace {days} dia{"s" if days != 1 else ""}'
+
+
 def media_stream_view(request, path):
     file_path = safe_join(settings.MEDIA_ROOT, path)
     if not file_path or not os.path.exists(file_path):
@@ -319,6 +372,14 @@ def user_dashboard_view(request):
     favorites_count = Favorite.objects.filter(user=request.user).count()
 
     hero_recommendation = continue_watching[0].movie if continue_watching else (favorites[0].movie if favorites else (recent_movies[0] if recent_movies else None))
+    greeting_title, greeting_copy = _build_member_greeting(timezone.localtime())
+    display_name = profile.display_name or request.user.username
+    total_progress_seconds = sum(item.progress_seconds for item in continue_watching)
+    last_session = recent_sessions[0] if recent_sessions else None
+    hero_progress = next(
+        (item.progress_seconds for item in continue_watching if hero_recommendation and item.movie_id == hero_recommendation.id),
+        0,
+    )
 
     context = {
         'profile': profile,
@@ -327,6 +388,23 @@ def user_dashboard_view(request):
         'continue_watching': continue_watching,
         'recent_sessions': recent_sessions,
         'hero_recommendation': hero_recommendation,
+        'hero_progress_label': f'{hero_progress}s guardados' if hero_progress else '',
+        'greeting_title': greeting_title,
+        'greeting_copy': greeting_copy,
+        'display_name': display_name,
+        'watch_runtime_label': _format_watch_runtime(total_progress_seconds),
+        'recent_presence_label': _format_relative_label(last_session.last_seen if last_session else None),
+        'recent_presence_device': (
+            f'{last_session.device_type} · {last_session.browser}'
+            if last_session
+            else 'Cuando empieces a ver algo, aqui apareceran tus ultimas sesiones.'
+        ),
+        'member_energy_label': 'Maraton activo' if continue_watching else 'Catalogo listo',
+        'member_energy_copy': (
+            'Tu fila ya tiene reproducciones para continuar sin perder ritmo.'
+            if continue_watching
+            else 'Explora el catalogo y arma tu primera noche de cine.'
+        ),
         'total_movies': total_movies,
         'favorites_count': favorites_count,
         'continue_count': len(continue_watching),

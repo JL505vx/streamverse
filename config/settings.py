@@ -26,6 +26,8 @@ CSRF_TRUSTED_ORIGINS = build_csrf_trusted_origins(
 )
 
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -64,6 +66,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
 
 
 database_url = os.getenv('DATABASE_URL', '').strip()
@@ -108,6 +111,26 @@ MEDIA_ROOT = Path(os.getenv('MEDIA_ROOT', str(BASE_DIR / 'media'))).expanduser()
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 APP_LOG_LEVEL = os.getenv('APP_LOG_LEVEL', 'INFO').strip().upper() or 'INFO'
+REDIS_URL = os.getenv('REDIS_URL', '').strip()
+
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [REDIS_URL],
+            },
+        },
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
+
+WATCH_PARTY_MEMBER_STALE_SECONDS = int(os.getenv('WATCH_PARTY_MEMBER_STALE_SECONDS', '120') or 120)
+WATCH_PARTY_MESSAGE_HISTORY_LIMIT = int(os.getenv('WATCH_PARTY_MESSAGE_HISTORY_LIMIT', '24') or 24)
 
 LOGGING = {
     'version': 1,
@@ -119,6 +142,11 @@ LOGGING = {
     },
     'loggers': {
         'core': {
+            'handlers': ['console'],
+            'level': APP_LOG_LEVEL,
+            'propagate': False,
+        },
+        'movies': {
             'handlers': ['console'],
             'level': APP_LOG_LEVEL,
             'propagate': False,

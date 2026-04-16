@@ -2,45 +2,107 @@
 {% block title %}Mi espacio | StreamVerse{% endblock %}
 {% block body_class %}member-page{% endblock %}
 {% block scene_theme %}member{% endblock %}
+{% block scene_mode %}member-cockpit{% endblock %}
 {% block scene_kicker %}Member Lounge{% endblock %}
 {% block scene_title %}Refresco frio, luces tenues y maraton en tu sala{% endblock %}
 {% block content %}
-<section class="dash-header glass profile-hero member-shell">
-  <div class="profile-avatar-wrap">
-    {% if profile.avatar_url %}
-      <img class="avatar" src="{{ profile.avatar_url }}" alt="Avatar">
-    {% else %}
-      <div class="avatar avatar-fallback">{{ user.username|slice:":1"|upper }}</div>
-    {% endif %}
-  </div>
-  <div class="member-intro">
-    <h1>Hola, {{ profile.display_name|default:user.username }}</h1>
-    <p class="muted">{{ profile.bio|default:"Tu espacio para seguir viendo, guardar favoritos y descubrir que poner en el siguiente maraton." }}</p>
-    <div class="hero-actions member-primary-actions">
+<section class="member-cockpit glass">
+  <div class="member-cockpit-main">
+    <p class="eyebrow member-kicker">{{ greeting_title }}</p>
+    <h1>{{ display_name }}, esta noche la sala es tuya.</h1>
+    <p class="lead member-cockpit-copy">{{ greeting_copy }}</p>
+
+    <div class="member-signal-row">
+      <span class="member-signal-pill">{{ watch_runtime_label }}</span>
+      <span class="member-signal-pill">{{ recent_presence_label }}</span>
+      <span class="member-signal-pill">{{ member_energy_label }}</span>
+    </div>
+
+    <div class="hero-actions member-primary-actions member-cockpit-actions">
       <a class="btn-primary" href="{% url 'home' %}">Explorar catalogo</a>
       <a class="btn-ghost" href="{% url 'user_settings' %}">Perfil y ajustes</a>
     </div>
-    <div class="member-shortcuts">
+
+    <div class="member-cockpit-shortcuts">
       <a href="#seguir-viendo" class="member-shortcut-chip">Seguir viendo</a>
       <a href="#mi-lista" class="member-shortcut-chip">Mi lista</a>
       <a href="#recien-agregadas" class="member-shortcut-chip">Recien agregadas</a>
     </div>
   </div>
+
   {% if hero_recommendation %}
-  <a class="member-highlight" href="{% url 'movie_detail' hero_recommendation.slug %}">
-    <span class="eyebrow">Sigue con esto</span>
+  <a
+    class="member-cockpit-feature"
+    href="{% url 'movie_detail' hero_recommendation.slug %}"
+    {% if hero_recommendation.cover_url %}
+    style="background-image:linear-gradient(180deg, rgba(8, 10, 18, 0.14), rgba(8, 10, 18, 0.96)), url('{{ hero_recommendation.cover_url }}')"
+    {% endif %}
+  >
+    <span class="member-feature-tag">Plan de esta noche</span>
     <strong>{{ hero_recommendation.title }}</strong>
     <small>{{ hero_recommendation.get_content_type_display }} | {{ hero_recommendation.genre.name }} | {{ hero_recommendation.release_year }}</small>
+    {% if hero_progress_label %}
+      <span class="member-feature-progress">{{ hero_progress_label }}</span>
+    {% else %}
+      <span class="member-feature-progress">Lista para reproducir</span>
+    {% endif %}
+    <span class="member-feature-cta">Abrir pelicula</span>
   </a>
   {% endif %}
+
+  <aside class="member-cockpit-side">
+    <article class="member-side-card member-side-card-avatar">
+      <div class="profile-avatar-wrap member-avatar-spotlight">
+        {% if profile.avatar_url %}
+          <img class="avatar" src="{{ profile.avatar_url }}" alt="Avatar">
+        {% else %}
+          <div class="avatar avatar-fallback">{{ user.username|slice:":1"|upper }}</div>
+        {% endif %}
+        <span class="member-avatar-status">Online</span>
+      </div>
+      <div>
+        <span class="member-side-label">Actividad real</span>
+        <strong>{{ recent_presence_device }}</strong>
+        <small>{{ recent_presence_label }}</small>
+      </div>
+    </article>
+
+    <article class="member-side-card">
+      <span class="member-side-label">Mi lista</span>
+      <strong>{{ favorites_count }} titulos esperando</strong>
+      <small>Guarda lo que quieras ver despues y armamos tu fila personal.</small>
+    </article>
+
+    <article class="member-side-card">
+      <span class="member-side-label">Recien agregado</span>
+      <strong>{{ new_releases_count }} novedades</strong>
+      <small>Tu catalogo se sigue moviendo, incluso cuando tu maraton ya va a la mitad.</small>
+    </article>
+  </aside>
 </section>
 
-<div class="stats member-stats member-stats-compact">
-  <article class="stat glass accent-card"><h3>{{ total_movies }}</h3><p>Titulos disponibles</p></article>
-  <article class="stat glass"><h3>{{ favorites_count }}</h3><p>En mi lista</p></article>
-  <article class="stat glass"><h3>{{ continue_count }}</h3><p>Seguir viendo</p></article>
-  <article class="stat glass"><h3>{{ new_releases_count }}</h3><p>Nuevas para ti</p></article>
-</div>
+<section class="member-stats-ribbon glass">
+  <article class="member-ribbon-card accent-card">
+    <span>Catalogo</span>
+    <strong>{{ total_movies }}</strong>
+    <small>Titulos disponibles</small>
+  </article>
+  <article class="member-ribbon-card">
+    <span>Mi lista</span>
+    <strong>{{ favorites_count }}</strong>
+    <small>Guardados para despues</small>
+  </article>
+  <article class="member-ribbon-card">
+    <span>Seguir viendo</span>
+    <strong>{{ continue_count }}</strong>
+    <small>Reproducciones activas</small>
+  </article>
+  <article class="member-ribbon-card">
+    <span>Nuevas para ti</span>
+    <strong>{{ new_releases_count }}</strong>
+    <small>Listas para estrenar</small>
+  </article>
+</section>
 
 <section class="section-head member-section-head" id="seguir-viendo">
   <div>
@@ -48,23 +110,31 @@
     <p class="muted">Tus avances listos para continuar en un toque.</p>
   </div>
 </section>
-<div class="rail poster-rail member-rail member-rail-shell">
-  {% for progress in continue_watching %}
-    <a class="poster member-poster" href="{% url 'movie_detail' progress.movie.slug %}">
-      <div class="poster-image" {% if progress.movie.cover_url %}style="background-image:url('{{ progress.movie.cover_url }}')"{% endif %}></div>
-      <div class="poster-meta">
-        <strong>{{ progress.movie.title }}</strong>
-        <small>{{ progress.progress_seconds }}s guardados</small>
-        <small>{{ progress.last_watched|date:"d/m H:i" }}</small>
-      </div>
-    </a>
-  {% empty %}
-    <article class="glass member-empty-state featured-empty-state">
-      <h3>Tu siguiente noche de cine empieza aqui</h3>
-      <p class="muted">En cuanto pauses una pelicula, aparecera en esta fila para volver justo donde te quedaste.</p>
-      <a class="btn-ghost" href="{% url 'home' %}">Ir al catalogo</a>
-    </article>
-  {% endfor %}
+<div class="rail-shell member-rail-shell" data-rail-shell>
+  <button type="button" class="rail-arrow rail-arrow-left" data-rail-prev aria-label="Desplazar seguir viendo a la izquierda">
+    <span aria-hidden="true">&#8249;</span>
+  </button>
+  <div class="rail poster-rail member-rail" data-rail-viewport>
+    {% for progress in continue_watching %}
+      <a class="poster member-poster" href="{% url 'movie_detail' progress.movie.slug %}">
+        <div class="poster-image" {% if progress.movie.cover_url %}style="background-image:url('{{ progress.movie.cover_url }}')"{% endif %}></div>
+        <div class="poster-meta">
+          <strong>{{ progress.movie.title }}</strong>
+          <small>{{ progress.progress_seconds }}s guardados</small>
+          <small>{{ progress.last_watched|date:"d/m H:i" }}</small>
+        </div>
+      </a>
+    {% empty %}
+      <article class="glass member-empty-state featured-empty-state">
+        <h3>Tu siguiente noche de cine empieza aqui</h3>
+        <p class="muted">En cuanto pauses una pelicula, aparecera en esta fila para volver justo donde te quedaste.</p>
+        <a class="btn-ghost" href="{% url 'home' %}">Ir al catalogo</a>
+      </article>
+    {% endfor %}
+  </div>
+  <button type="button" class="rail-arrow rail-arrow-right" data-rail-next aria-label="Desplazar seguir viendo a la derecha">
+    <span aria-hidden="true">&#8250;</span>
+  </button>
 </div>
 
 <section class="section-head member-section-head" id="mi-lista">
@@ -73,22 +143,30 @@
     <p class="muted">Tu fila personal para guardar lo que quieres ver despues.</p>
   </div>
 </section>
-<div class="rail poster-rail member-rail member-rail-shell">
-  {% for fav in favorites %}
-    <a class="poster member-poster" href="{% url 'movie_detail' fav.movie.slug %}">
-      <div class="poster-image" {% if fav.movie.cover_url %}style="background-image:url('{{ fav.movie.cover_url }}')"{% endif %}></div>
-      <div class="poster-meta">
-        <strong>{{ fav.movie.title }}</strong>
-        <small>{{ fav.movie.get_content_type_display }} | {{ fav.movie.genre.name }}</small>
-      </div>
-    </a>
-  {% empty %}
-    <article class="glass member-empty-state featured-empty-state">
-      <h3>Empieza tu lista personal</h3>
-      <p class="muted">Usa el boton <strong>Mi lista</strong> dentro de cualquier pelicula para guardarla aqui.</p>
-      <a class="btn-ghost" href="{% url 'home' %}">Buscar peliculas</a>
-    </article>
-  {% endfor %}
+<div class="rail-shell member-rail-shell" data-rail-shell>
+  <button type="button" class="rail-arrow rail-arrow-left" data-rail-prev aria-label="Desplazar mi lista a la izquierda">
+    <span aria-hidden="true">&#8249;</span>
+  </button>
+  <div class="rail poster-rail member-rail" data-rail-viewport>
+    {% for fav in favorites %}
+      <a class="poster member-poster" href="{% url 'movie_detail' fav.movie.slug %}">
+        <div class="poster-image" {% if fav.movie.cover_url %}style="background-image:url('{{ fav.movie.cover_url }}')"{% endif %}></div>
+        <div class="poster-meta">
+          <strong>{{ fav.movie.title }}</strong>
+          <small>{{ fav.movie.get_content_type_display }} | {{ fav.movie.genre.name }}</small>
+        </div>
+      </a>
+    {% empty %}
+      <article class="glass member-empty-state featured-empty-state">
+        <h3>Empieza tu lista personal</h3>
+        <p class="muted">Usa el boton <strong>Mi lista</strong> dentro de cualquier pelicula para guardarla aqui.</p>
+        <a class="btn-ghost" href="{% url 'home' %}">Buscar peliculas</a>
+      </article>
+    {% endfor %}
+  </div>
+  <button type="button" class="rail-arrow rail-arrow-right" data-rail-next aria-label="Desplazar mi lista a la derecha">
+    <span aria-hidden="true">&#8250;</span>
+  </button>
 </div>
 
 <section class="section-head member-section-head" id="recien-agregadas">
@@ -97,20 +175,28 @@
     <p class="muted">Lo ultimo que entro al catalogo, listo para tu siguiente maraton.</p>
   </div>
 </section>
-<div class="rail poster-rail member-rail member-rail-shell">
-  {% for movie in recent_movies %}
-    <a class="poster member-poster" href="{% url 'movie_detail' movie.slug %}">
-      <div class="poster-image" {% if movie.cover_url %}style="background-image:url('{{ movie.cover_url }}')"{% endif %}></div>
-      <div class="poster-meta">
-        <strong>{{ movie.title }}</strong>
-        <small>{{ movie.get_content_type_display }} | {{ movie.genre.name }}</small>
-      </div>
-    </a>
-  {% empty %}
-    <article class="glass member-empty-state featured-empty-state">
-      <h3>Tu catalogo se vera aqui</h3>
-      <p class="muted">Apenas el admin publique contenido nuevo, aparecera en esta fila.</p>
-    </article>
-  {% endfor %}
+<div class="rail-shell member-rail-shell" data-rail-shell>
+  <button type="button" class="rail-arrow rail-arrow-left" data-rail-prev aria-label="Desplazar recien agregadas a la izquierda">
+    <span aria-hidden="true">&#8249;</span>
+  </button>
+  <div class="rail poster-rail member-rail" data-rail-viewport>
+    {% for movie in recent_movies %}
+      <a class="poster member-poster" href="{% url 'movie_detail' movie.slug %}">
+        <div class="poster-image" {% if movie.cover_url %}style="background-image:url('{{ movie.cover_url }}')"{% endif %}></div>
+        <div class="poster-meta">
+          <strong>{{ movie.title }}</strong>
+          <small>{{ movie.get_content_type_display }} | {{ movie.genre.name }}</small>
+        </div>
+      </a>
+    {% empty %}
+      <article class="glass member-empty-state featured-empty-state">
+        <h3>Tu catalogo se vera aqui</h3>
+        <p class="muted">Apenas el admin publique contenido nuevo, aparecera en esta fila.</p>
+      </article>
+    {% endfor %}
+  </div>
+  <button type="button" class="rail-arrow rail-arrow-right" data-rail-next aria-label="Desplazar recien agregadas a la derecha">
+    <span aria-hidden="true">&#8250;</span>
+  </button>
 </div>
 {% endblock %}

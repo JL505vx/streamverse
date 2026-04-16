@@ -2,6 +2,7 @@
 {% block title %}Inicio | StreamVerse{% endblock %}
 {% block body_class %}home-page{% endblock %}
 {% block scene_theme %}audience{% endblock %}
+{% block scene_mode %}premiere{% endblock %}
 {% block scene_kicker %}Private Premiere{% endblock %}
 {% block scene_title %}Tu biblioteca convertida en una experiencia de streaming mas libre y mas tuya{% endblock %}
 {% block content %}
@@ -69,22 +70,30 @@
   <h2>Seguir viendo</h2>
   <p class="muted">Retoma tus peliculas justo donde te quedaste.</p>
 </section>
-  <div class="home-carousel">
-  {% for item in continue_watching %}
-  <a class="poster" href="{% url 'movie_detail' item.movie.slug %}">
-    {% if item.movie.cover_url %}
-    <div class="poster-image" style="background-image:url('{{ item.movie.cover_url }}')"></div>
-    {% else %}
-    <div class="poster-image"></div>
-    {% endif %}
-    <div class="poster-meta">
-      <strong>{{ item.movie.title }}</strong>
-      <small>Continuar: {{ item.progress_seconds }}s</small>
-    </div>
-  </a>
-  {% empty %}
-  <p class="muted">Todavia no hay progreso guardado.</p>
-  {% endfor %}
+<div class="rail-shell rail-shell-home" data-rail-shell>
+  <button type="button" class="rail-arrow rail-arrow-left" data-rail-prev aria-label="Desplazar seguir viendo a la izquierda">
+    <span aria-hidden="true">&#8249;</span>
+  </button>
+  <div class="home-carousel" data-rail-viewport>
+    {% for item in continue_watching %}
+    <a class="poster" href="{% url 'movie_detail' item.movie.slug %}">
+      {% if item.movie.cover_url %}
+      <div class="poster-image" style="background-image:url('{{ item.movie.cover_url }}')"></div>
+      {% else %}
+      <div class="poster-image"></div>
+      {% endif %}
+      <div class="poster-meta">
+        <strong>{{ item.movie.title }}</strong>
+        <small>Continuar: {{ item.progress_seconds }}s</small>
+      </div>
+    </a>
+    {% empty %}
+    <p class="muted">Todavia no hay progreso guardado.</p>
+    {% endfor %}
+  </div>
+  <button type="button" class="rail-arrow rail-arrow-right" data-rail-next aria-label="Desplazar seguir viendo a la derecha">
+    <span aria-hidden="true">&#8250;</span>
+  </button>
 </div>
 {% endif %}
 
@@ -93,21 +102,29 @@
   <h2>Lo nuevo en StreamVerse</h2>
   <p class="muted">Nuevas peliculas y series listas para entrar a tu maraton.</p>
 </section>
-<div class="home-carousel latest-carousel">
-  {% for movie in latest_additions %}
-  <a class="poster home-poster" href="{% url 'movie_detail' movie.slug %}">
-    {% if movie.cover_url %}
-    <div class="poster-image" style="background-image:url('{{ movie.cover_url }}')"></div>
-    {% else %}
-    <div class="poster-image"></div>
-    {% endif %}
-    <div class="poster-meta">
-      <small class="mini-tag">Nuevo</small>
-      <strong>{{ movie.title }}</strong>
-      <small>{{ movie.get_content_type_display }} | {{ movie.genre.name }}</small>
-    </div>
-  </a>
-  {% endfor %}
+<div class="rail-shell rail-shell-home" data-rail-shell>
+  <button type="button" class="rail-arrow rail-arrow-left" data-rail-prev aria-label="Desplazar nuevos lanzamientos a la izquierda">
+    <span aria-hidden="true">&#8249;</span>
+  </button>
+  <div class="home-carousel latest-carousel" data-rail-viewport>
+    {% for movie in latest_additions %}
+    <a class="poster home-poster" href="{% url 'movie_detail' movie.slug %}">
+      {% if movie.cover_url %}
+      <div class="poster-image" style="background-image:url('{{ movie.cover_url }}')"></div>
+      {% else %}
+      <div class="poster-image"></div>
+      {% endif %}
+      <div class="poster-meta">
+        <small class="mini-tag">Nuevo</small>
+        <strong>{{ movie.title }}</strong>
+        <small>{{ movie.get_content_type_display }} | {{ movie.genre.name }}</small>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  <button type="button" class="rail-arrow rail-arrow-right" data-rail-next aria-label="Desplazar nuevos lanzamientos a la derecha">
+    <span aria-hidden="true">&#8250;</span>
+  </button>
 </div>
 {% endif %}
 

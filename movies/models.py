@@ -1,8 +1,17 @@
+import secrets
+
 from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
 
 from core.local_media import local_media_exists, resolve_local_media_path
+
+
+WATCH_PARTY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+
+def _generate_watch_party_code():
+    return ''.join(secrets.choice(WATCH_PARTY_ALPHABET) for _ in range(6))
 
 
 class Genre(models.Model):
@@ -174,3 +183,73 @@ class PlaybackProgress(models.Model):
     def __str__(self):
         return f'{self.user} - {self.movie} ({self.progress_seconds}s)'
 
+
+class WatchParty(models.Model):
+    class ControlMode(models.TextChoices):
+        HOST = 'host', 'Solo host'
+        SHARED = 'shared', 'Control compartido'
+
+    class PlaybackState(models.TextChoices):
+        PAUSED = 'paused', 'Pausada'
+        PLAYING = 'playing', 'Reproduciendo'
+
+    movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='watch_parties')
+    host = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='hosted_watch_parties')
+    code = models.CharField(max_length=12, unique=True, blank=True)
+    control_mode = models.CharField(max_length=12, choices=ControlMode.choices, default=ControlMode.HOST)
+    playback_state = models.CharField(max_length=12, choices=PlaybackState.choices, default=PlaybackState.PAUSED)
+    current_time_seconds = models.FloatField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_action_at = models.DateTimeField(auto_now=True)
+    last_action_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='watch_party_actions',
+    )
+
+    class Meta:
+        ordering = ['-last_action_at']
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            candidate = _generate_watch_party_code()
+            while WatchParty.objects.filter(code=candidate).exclude(pk=self.pk).exists():
+                candidate = _generate_watch_party_code()
+            self.code = candidate
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.movie.title} - {self.code}'
+
+
+class WatchPartyMember(models.Model):
+    party = models.ForeignKey(WatchParty, on_delete=models.CASCADE, related_name='members')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='watch_party_memberships')
+    joined_at = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now=True)
+    is_connected = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['joined_at']
+        constraints = [
+            models.UniqueConstraint(fields=['party', 'user'], name='unique_watch_party_member')
+        ]
+
+    def __str__(self):
+        return f'{self.user} en {self.party.code}'
+
+
+class WatchPartyMessage(models.Model):
+    party = models.ForeignKey(WatchParty, on_delete=models.CASCADE, related_name='messages')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='watch_party_messages')
+    text = models.CharField(max_length=400)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f'{self.user} en {self.party.code}: {self.text[:40]}'

@@ -11,7 +11,11 @@
   <link rel="stylesheet" href="{% static 'css/main.css' %}">
   {% block extra_head %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}" data-scene-theme="{% block scene_theme %}audience{% endblock %}">
+<body
+  class="{% block body_class %}{% endblock %}"
+  data-scene-theme="{% block scene_theme %}audience{% endblock %}"
+  data-scene-mode="{% block scene_mode %}default{% endblock %}"
+>
   <div class="cinema-stage" aria-hidden="true">
     <canvas id="cinema-scene"></canvas>
     <div class="cinema-glow cinema-glow-left"></div>
@@ -83,6 +87,7 @@
   </nav>
   {% endif %}
   <script type="module" src="{% static 'js/cinema-scene.js' %}"></script>
+  <script src="{% static 'js/rail-carousel.js' %}"></script>
   {% block extra_scripts %}{% endblock %}
 </body>
 </html>

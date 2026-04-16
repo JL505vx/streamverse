@@ -1,6 +1,8 @@
 ﻿{% extends "base.html" %}
 {% block title %}{{ movie.title }} | StreamVerse{% endblock %}
 {% block body_class %}member-page{% endblock %}
+{% block scene_theme %}member{% endblock %}
+{% block scene_mode %}player-focus{% endblock %}
 {% block content %}
 <section class="player-layout player-shell">
   <div class="player-main glass">
@@ -16,6 +18,81 @@
         <button id="resume-btn" type="button" class="btn-primary">Continuar desde {{ resume_label }}</button>
       {% endif %}
     </div>
+
+    <section
+      class="watch-party-panel glass"
+      data-watch-party-root
+      data-create-url="{% url 'watch_party_create' movie.slug %}"
+      data-join-url="{% url 'watch_party_join' movie.slug %}"
+      data-state-template="{% url 'watch_party_state' movie.slug '__CODE__' %}"
+      data-sync-template="{% url 'watch_party_sync' movie.slug '__CODE__' %}"
+      data-leave-template="{% url 'watch_party_leave' movie.slug '__CODE__' %}"
+      data-ws-template="/ws/watch-party/{{ movie.slug }}/__CODE__/"
+    >
+      <div class="watch-party-head">
+        <div>
+          <p class="eyebrow">Watch Party</p>
+          <h2>Sala sincronizada, chat en vivo y control compartido cuando tu quieras.</h2>
+          <p class="muted">La peli puede moverse en tiempo real para todos. Brillo y volumen siguen siendo personales para cada quien.</p>
+        </div>
+        <div class="watch-party-join">
+          <button type="button" class="btn-primary" data-watch-party-create>Crear sala</button>
+          <form class="watch-party-join-form" data-watch-party-join-form>
+            <input type="text" class="form-input watch-party-code-input" maxlength="12" placeholder="Codigo de sala" data-watch-party-code-input>
+            <button type="submit" class="btn-ghost">Unirse</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="watch-party-live" data-watch-party-live hidden>
+        <div class="watch-party-live-head">
+          <div>
+            <div class="watch-party-meta-row">
+              <span class="watch-party-badge" data-watch-party-code-badge>Sala ----</span>
+              <span class="watch-party-connection" data-watch-party-connection>Desconectado</span>
+            </div>
+            <strong data-watch-party-title>Sincronizando sala</strong>
+          </div>
+          <div class="watch-party-live-actions">
+            <button type="button" class="btn-ghost" data-watch-party-control-mode disabled>Cambiar a control compartido</button>
+            <button type="button" class="btn-ghost" data-watch-party-copy>Copiar link</button>
+            <button type="button" class="btn-ghost" data-watch-party-leave>Salir de la sala</button>
+          </div>
+        </div>
+        <div class="watch-party-live-grid">
+          <article class="watch-party-live-card">
+            <span>Control</span>
+            <strong data-watch-party-host>Sin anfitrion</strong>
+            <small data-watch-party-control-copy>La sincronizacion aparecera aqui en cuanto crees o te unas a una sala.</small>
+          </article>
+          <article class="watch-party-live-card">
+            <span>Personas dentro</span>
+            <strong data-watch-party-count>0</strong>
+            <small data-watch-party-members>Aun no hay participantes.</small>
+            <ul class="watch-party-member-list" data-watch-party-member-list></ul>
+          </article>
+          <article class="watch-party-live-card">
+            <span>Estado</span>
+            <strong data-watch-party-state>Pausada</strong>
+            <small data-watch-party-last-action>Esperando la primera accion sincronizada.</small>
+          </article>
+        </div>
+
+        <div class="watch-party-chat-shell">
+          <div class="watch-party-chat-head">
+            <strong>Chat de la sala</strong>
+            <small class="muted">Mensajes cortos, sincronizacion larga.</small>
+          </div>
+          <div class="watch-party-chat-log" data-watch-party-chat-log>
+            <p class="watch-party-chat-empty" data-watch-party-chat-empty>Cuando alguien escriba, el chat aparecera aqui.</p>
+          </div>
+          <form class="watch-party-chat-form" data-watch-party-chat-form>
+            <input type="text" class="form-input" maxlength="400" placeholder="Escribe algo a la sala..." data-watch-party-chat-input>
+            <button type="submit" class="btn-primary">Enviar</button>
+          </form>
+        </div>
+      </div>
+    </section>
 
     <div class="player-frame" data-player-shell>
       <video id="stream-player" class="player" playsinline controlsList="nodownload noremoteplayback" disablepictureinpicture preload="metadata" oncontextmenu="return false;" {% if movie.cover_url %}poster="{{ movie.cover_url }}"{% endif %}>
@@ -95,20 +172,31 @@
     <h2>Mas del mismo genero</h2>
     <p class="muted">Sugerencias listas para deslizar sin salir de la peli.</p>
   </div>
-  <div class="poster-carousel">
-    {% for item in related_movies %}
-      <a class="poster recommendation-card" href="{% url 'movie_detail' item.slug %}">
-        <div class="recommendation-image" {% if item.cover_url %}style="background-image:url('{{ item.cover_url }}')"{% endif %}></div>
-        <div class="poster-meta recommendation-meta">
-          <strong>{{ item.title }}</strong>
-          <small>{{ item.release_year }}</small>
-        </div>
-      </a>
-    {% empty %}
-      <p class="muted">No hay recomendaciones aun.</p>
-    {% endfor %}
+  <div class="rail-shell rail-shell-related" data-rail-shell>
+    <button type="button" class="rail-arrow rail-arrow-left" data-rail-prev aria-label="Desplazar recomendaciones a la izquierda">
+      <span aria-hidden="true">&#8249;</span>
+    </button>
+    <div class="poster-carousel" data-rail-viewport>
+      {% for item in related_movies %}
+        <a class="poster recommendation-card" href="{% url 'movie_detail' item.slug %}">
+          <div class="recommendation-image" {% if item.cover_url %}style="background-image:url('{{ item.cover_url }}')"{% endif %}></div>
+          <div class="poster-meta recommendation-meta">
+            <strong>{{ item.title }}</strong>
+            <small>{{ item.release_year }}</small>
+          </div>
+        </a>
+      {% empty %}
+        <p class="muted">No hay recomendaciones aun.</p>
+      {% endfor %}
+    </div>
+    <button type="button" class="rail-arrow rail-arrow-right" data-rail-next aria-label="Desplazar recomendaciones a la derecha">
+      <span aria-hidden="true">&#8250;</span>
+    </button>
   </div>
 </section>
+
+{{ watch_party_bootstrap|json_script:"watch-party-bootstrap" }}
+{{ initial_party_code|json_script:"watch-party-initial-code" }}
 
 <script>
 (function () {
@@ -143,6 +231,28 @@
   const rightRipple = document.querySelector('[data-ripple-right]');
   const previewBadge = document.querySelector('[data-preview-badge]');
   const hud = document.querySelector('[data-player-hud]');
+  const watchPartyRoot = document.querySelector('[data-watch-party-root]');
+  const watchPartyCreateBtn = document.querySelector('[data-watch-party-create]');
+  const watchPartyJoinForm = document.querySelector('[data-watch-party-join-form]');
+  const watchPartyCodeInput = document.querySelector('[data-watch-party-code-input]');
+  const watchPartyLive = document.querySelector('[data-watch-party-live]');
+  const watchPartyCodeBadge = document.querySelector('[data-watch-party-code-badge]');
+  const watchPartyTitle = document.querySelector('[data-watch-party-title]');
+  const watchPartyHost = document.querySelector('[data-watch-party-host]');
+  const watchPartyCount = document.querySelector('[data-watch-party-count]');
+  const watchPartyMembers = document.querySelector('[data-watch-party-members]');
+  const watchPartyMemberList = document.querySelector('[data-watch-party-member-list]');
+  const watchPartyState = document.querySelector('[data-watch-party-state]');
+  const watchPartyLastAction = document.querySelector('[data-watch-party-last-action]');
+  const watchPartyControlCopy = document.querySelector('[data-watch-party-control-copy]');
+  const watchPartyCopyBtn = document.querySelector('[data-watch-party-copy]');
+  const watchPartyLeaveBtn = document.querySelector('[data-watch-party-leave]');
+  const watchPartyConnection = document.querySelector('[data-watch-party-connection]');
+  const watchPartyControlModeBtn = document.querySelector('[data-watch-party-control-mode]');
+  const watchPartyChatLog = document.querySelector('[data-watch-party-chat-log]');
+  const watchPartyChatEmpty = document.querySelector('[data-watch-party-chat-empty]');
+  const watchPartyChatForm = document.querySelector('[data-watch-party-chat-form]');
+  const watchPartyChatInput = document.querySelector('[data-watch-party-chat-input]');
   const prefersHover = window.matchMedia('(hover: hover)').matches;
   const isSmallScreen = window.matchMedia('(max-width: 640px)');
   const supportsPointerEvents = 'PointerEvent' in window;
@@ -160,10 +270,51 @@
   let volumePopoverTimer = null;
   let controlsRecentlyToggled = false;
   let activeGesturePointerId = null;
+  let activeParty = null;
+  let partyPollTimer = null;
+  let partyHeartbeatAt = 0;
+  let remotePartySync = false;
+  let activePartyMessages = [];
+  let partySocket = null;
+  let partySocketConnected = false;
+  let partySocketReconnectTimer = null;
+  let partySocketHeartbeatTimer = null;
+  let partySocketReconnectAttempts = 0;
 
   const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
+  const playerSettingsKey = 'streamverse-player-settings-v2';
+  const rawPlayerSettings = window.localStorage.getItem(playerSettingsKey);
+  let playerSettings = {};
+  try {
+    playerSettings = rawPlayerSettings ? JSON.parse(rawPlayerSettings) : {};
+  } catch (error) {
+    playerSettings = {};
+  }
+  const watchPartyBootstrapNode = document.getElementById('watch-party-bootstrap');
+  const watchPartyInitialCodeNode = document.getElementById('watch-party-initial-code');
+  const watchPartyBootstrapPayload = watchPartyBootstrapNode ? JSON.parse(watchPartyBootstrapNode.textContent) : null;
+  const bootstrappedParty = watchPartyBootstrapPayload ? watchPartyBootstrapPayload.party : null;
+  const bootstrappedMessages = watchPartyBootstrapPayload ? (watchPartyBootstrapPayload.messages || []) : [];
+  const bootstrappedPartyCode = watchPartyInitialCodeNode ? JSON.parse(watchPartyInitialCodeNode.textContent || '""') : '';
   if (playerShell && hasTouchInput) {
     playerShell.classList.add('has-touch-input');
+  }
+
+  if (bootstrappedParty) {
+    activeParty = bootstrappedParty;
+    activePartyMessages = bootstrappedMessages;
+  }
+
+  try {
+    brightnessLevel = typeof playerSettings.brightnessLevel === 'number' ? playerSettings.brightnessLevel : 0.12;
+    if (typeof playerSettings.volume === 'number') {
+      player.volume = Math.min(1, Math.max(0, playerSettings.volume));
+    }
+    if (typeof playerSettings.muted === 'boolean') {
+      player.muted = playerSettings.muted;
+    }
+  } catch (error) {
+    brightnessLevel = 0.12;
   }
 
   function formatTime(totalSeconds) {
@@ -175,6 +326,400 @@
       return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     }
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  function persistPlayerSettings() {
+    try {
+      window.localStorage.setItem(playerSettingsKey, JSON.stringify({
+        brightnessLevel,
+        volume: player.volume,
+        muted: player.muted,
+      }));
+    } catch (error) {
+      // El almacenamiento local puede estar bloqueado; no rompemos la reproduccion.
+    }
+  }
+
+  function formatRelativeFromIso(isoString) {
+    if (!isoString) return 'Sin actividad sincronizada';
+    const timestamp = Date.parse(isoString);
+    if (Number.isNaN(timestamp)) return 'Sin actividad sincronizada';
+    const deltaSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    if (deltaSeconds < 5) return 'Hace un momento';
+    if (deltaSeconds < 60) return `Hace ${deltaSeconds}s`;
+    if (deltaSeconds < 3600) return `Hace ${Math.floor(deltaSeconds / 60)} min`;
+    return `Hace ${Math.floor(deltaSeconds / 3600)} h`;
+  }
+
+  function watchPartyUrl(template, code) {
+    if (!template || !code) return '';
+    return template.replace('__CODE__', encodeURIComponent(code));
+  }
+
+  function watchPartySocketUrl(code) {
+    const socketPath = watchPartyUrl(watchPartyRoot?.dataset.wsTemplate, code);
+    if (!socketPath) return '';
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}${socketPath}`;
+  }
+
+  function setWatchPartyConnection(state, label) {
+    if (!watchPartyConnection) return;
+    watchPartyConnection.dataset.state = state;
+    watchPartyConnection.textContent = label;
+  }
+
+  function normalizePartyParticipants(party) {
+    return Array.isArray(party?.participants) ? party.participants : [];
+  }
+
+  function renderWatchPartyMessages() {
+    if (!watchPartyChatLog) return;
+    watchPartyChatLog.innerHTML = '';
+
+    if (!activePartyMessages.length) {
+      if (watchPartyChatEmpty) {
+        watchPartyChatEmpty.hidden = false;
+        watchPartyChatLog.appendChild(watchPartyChatEmpty);
+      }
+      return;
+    }
+
+    if (watchPartyChatEmpty) {
+      watchPartyChatEmpty.hidden = true;
+    }
+
+    activePartyMessages.forEach((message) => {
+      const item = document.createElement('article');
+      item.className = `watch-party-chat-item${message.is_self ? ' is-self' : ''}`;
+
+      const meta = document.createElement('div');
+      meta.className = 'watch-party-chat-meta';
+
+      const author = document.createElement('strong');
+      author.textContent = message.username || 'Invitado';
+      meta.appendChild(author);
+
+      const time = document.createElement('small');
+      time.textContent = formatRelativeFromIso(message.created_at);
+      meta.appendChild(time);
+
+      const body = document.createElement('p');
+      body.textContent = message.text || '';
+
+      item.appendChild(meta);
+      item.appendChild(body);
+      watchPartyChatLog.appendChild(item);
+    });
+
+    watchPartyChatLog.scrollTop = watchPartyChatLog.scrollHeight;
+  }
+
+  function renderWatchPartyPanel() {
+    if (!watchPartyRoot || !watchPartyLive) return;
+
+    const isActive = Boolean(activeParty && activeParty.code);
+    watchPartyLive.hidden = !isActive;
+    watchPartyRoot.classList.toggle('is-live', isActive);
+    if (!isActive) {
+      setWatchPartyConnection('offline', 'Desconectado');
+      if (watchPartyChatLog) watchPartyChatLog.innerHTML = '';
+      if (watchPartyChatEmpty) {
+        watchPartyChatEmpty.hidden = false;
+        watchPartyChatLog?.appendChild(watchPartyChatEmpty);
+      }
+      if (watchPartyMemberList) {
+        watchPartyMemberList.innerHTML = '';
+      }
+      if (watchPartyControlModeBtn) {
+        watchPartyControlModeBtn.disabled = true;
+        watchPartyControlModeBtn.textContent = 'Cambiar a control compartido';
+      }
+      return;
+    }
+
+    const participants = normalizePartyParticipants(activeParty);
+    const memberNames = participants.map((member) => member.username);
+    const controlShared = activeParty.control_mode === 'shared';
+
+    watchPartyCodeBadge.textContent = `Sala ${activeParty.code}`;
+    watchPartyTitle.textContent = activeParty.movie_title || 'Sala sincronizada';
+    watchPartyHost.textContent = activeParty.host_username || 'Sin anfitrion';
+    watchPartyCount.textContent = String(activeParty.participant_count || 0);
+    watchPartyMembers.textContent = memberNames.join(' · ') || 'Solo tu por ahora';
+    watchPartyState.textContent = activeParty.playback_state === 'playing' ? 'Reproduciendo' : 'Pausada';
+    watchPartyLastAction.textContent = `Ultima accion: ${activeParty.last_action_by || activeParty.host_username} · ${formatRelativeFromIso(activeParty.last_action_at)}`;
+    watchPartyControlCopy.textContent = controlShared
+      ? 'La sala esta en control compartido: cualquiera dentro puede mover play, pausa y saltos.'
+      : (
+        activeParty.can_control
+          ? 'Eres anfitrion: tu mandas la sala completa.'
+          : `La sala la controla ${activeParty.host_username}. Tu brillo y volumen siguen siendo solo tuyos.`
+      );
+    if (watchPartyLeaveBtn) {
+      watchPartyLeaveBtn.textContent = activeParty.can_control ? 'Cerrar sala' : 'Salir de la sala';
+    }
+    if (watchPartyControlModeBtn) {
+      watchPartyControlModeBtn.disabled = !activeParty.is_host;
+      watchPartyControlModeBtn.textContent = controlShared
+        ? 'Volver a solo host'
+        : 'Cambiar a control compartido';
+    }
+    if (watchPartyMemberList) {
+      watchPartyMemberList.innerHTML = '';
+      participants.forEach((member) => {
+        const item = document.createElement('li');
+        item.className = `watch-party-member-chip${member.is_online ? ' is-online' : ''}`;
+        item.textContent = member.is_host ? `${member.username} · host` : member.username;
+        watchPartyMemberList.appendChild(item);
+      });
+    }
+    renderWatchPartyMessages();
+  }
+
+  function ingestWatchPartyPayload(payload) {
+    if (!payload) return;
+    if (payload.party) {
+      if (!payload.party.invite_url && activeParty?.invite_url) {
+        payload.party.invite_url = activeParty.invite_url;
+      }
+      activeParty = payload.party;
+    }
+    if (Array.isArray(payload.messages)) {
+      activePartyMessages = payload.messages;
+    }
+    renderWatchPartyPanel();
+  }
+
+  function disconnectWatchPartySocket() {
+    clearTimeout(partySocketReconnectTimer);
+    clearInterval(partySocketHeartbeatTimer);
+    partySocketReconnectTimer = null;
+    partySocketHeartbeatTimer = null;
+    if (partySocket) {
+      try {
+        partySocket.onopen = null;
+        partySocket.onmessage = null;
+        partySocket.onerror = null;
+        partySocket.onclose = null;
+        partySocket.close();
+      } catch (error) {
+        // Ignorado.
+      }
+    }
+    partySocket = null;
+    partySocketConnected = false;
+    if (activeParty) {
+      setWatchPartyConnection('offline', 'Reconectando...');
+    }
+  }
+
+  function scheduleWatchPartyReconnect() {
+    clearTimeout(partySocketReconnectTimer);
+    if (!activeParty) return;
+    const nextDelay = Math.min(1800 + partySocketReconnectAttempts * 600, 6000);
+    setWatchPartyConnection('offline', 'Reconectando...');
+    partySocketReconnectTimer = window.setTimeout(() => {
+      connectWatchPartySocket();
+    }, nextDelay);
+  }
+
+  function connectWatchPartySocket() {
+    if (!activeParty || !activeParty.code) return;
+    const socketUrl = watchPartySocketUrl(activeParty.code);
+    if (!socketUrl) return;
+
+    disconnectWatchPartySocket();
+    setWatchPartyConnection('connecting', 'Conectando...');
+
+    try {
+      partySocket = new WebSocket(socketUrl);
+    } catch (error) {
+      scheduleWatchPartyReconnect();
+      return;
+    }
+
+    partySocket.onopen = function () {
+      partySocketConnected = true;
+      partySocketReconnectAttempts = 0;
+      setWatchPartyConnection('online', 'En vivo');
+      clearInterval(partyPollTimer);
+      clearInterval(partySocketHeartbeatTimer);
+      partySocketHeartbeatTimer = window.setInterval(() => {
+        if (partySocket && partySocket.readyState === WebSocket.OPEN) {
+          partySocket.send(JSON.stringify({ type: 'heartbeat' }));
+        }
+      }, 18000);
+    };
+
+    partySocket.onmessage = function (event) {
+      try {
+        const payload = JSON.parse(event.data || '{}');
+        if (payload.type === 'party.error') {
+          showHud('La sala rechazo esa accion');
+          return;
+        }
+        if (payload.type === 'party.closed') {
+          disconnectWatchPartySocket();
+          activeParty = null;
+          activePartyMessages = [];
+          clearInterval(partyPollTimer);
+          renderWatchPartyPanel();
+          updateWatchPartyUrl('');
+          showHud('La sala se cerro');
+          return;
+        }
+        if (payload.type === 'party.message' && payload.message) {
+          activePartyMessages = [...activePartyMessages, payload.message].slice(-40);
+          renderWatchPartyMessages();
+          return;
+        }
+        if (payload.party) {
+          ingestWatchPartyPayload(payload);
+          if (!activeParty.can_control) {
+            applyRemotePartyState(activeParty);
+          }
+        }
+      } catch (error) {
+        // Ignorado para no tumbar la reproduccion.
+      }
+    };
+
+    partySocket.onerror = function () {
+      partySocketConnected = false;
+      setWatchPartyConnection('offline', 'Sincronizacion inestable');
+    };
+
+    partySocket.onclose = function () {
+      partySocketConnected = false;
+      clearInterval(partySocketHeartbeatTimer);
+      partySocketHeartbeatTimer = null;
+      if (activeParty) {
+        partySocketReconnectAttempts += 1;
+        ensureWatchPartyPolling();
+        scheduleWatchPartyReconnect();
+      } else {
+        setWatchPartyConnection('offline', 'Desconectado');
+      }
+    };
+  }
+
+  function sendWatchPartySocketEvent(payload) {
+    if (!partySocket || partySocket.readyState !== WebSocket.OPEN) return false;
+    partySocket.send(JSON.stringify(payload));
+    return true;
+  }
+
+  function guardPartyControl() {
+    if (!activeParty || activeParty.can_control) return true;
+    showHud(`La sala la controla ${activeParty.host_username}`);
+    return false;
+  }
+
+  function computeRemotePartyTime(party) {
+    const baseTime = Number(party.current_time_seconds || 0);
+    if (party.playback_state !== 'playing') return baseTime;
+    const lastActionTimestamp = Date.parse(party.last_action_at || '');
+    if (Number.isNaN(lastActionTimestamp)) return baseTime;
+    return baseTime + ((Date.now() - lastActionTimestamp) / 1000);
+  }
+
+  function applyRemotePartyState(party) {
+    if (!party || party.can_control) return;
+    const targetTime = computeRemotePartyTime(party);
+    const drift = Math.abs((player.currentTime || 0) - targetTime);
+    remotePartySync = true;
+
+    if (drift > 1.4 && Number.isFinite(targetTime)) {
+      player.currentTime = Math.max(0, targetTime);
+    }
+
+    if (party.playback_state === 'playing' && player.paused) {
+      player.play().catch(() => {});
+    } else if (party.playback_state !== 'playing' && !player.paused) {
+      player.pause();
+    }
+
+    window.setTimeout(() => {
+      remotePartySync = false;
+    }, 260);
+  }
+
+  async function sendWatchPartySync(forceState) {
+    if (!activeParty || !activeParty.can_control) return;
+    if (sendWatchPartySocketEvent({
+      type: 'playback_sync',
+      playback_state: forceState || (player.paused ? 'paused' : 'playing'),
+      current_time_seconds: Number(player.currentTime || 0),
+    })) {
+      return;
+    }
+    const syncUrl = watchPartyUrl(watchPartyRoot?.dataset.syncTemplate, activeParty.code);
+    if (!syncUrl) return;
+
+    try {
+      const response = await fetch(syncUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+          playback_state: forceState || (player.paused ? 'paused' : 'playing'),
+          current_time_seconds: Number(player.currentTime || 0),
+        }),
+      });
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (payload.ok && payload.party) {
+        ingestWatchPartyPayload(payload);
+      }
+    } catch (error) {
+      // Si la red falla, el reproductor local sigue funcionando.
+    }
+  }
+
+  async function refreshWatchPartyState() {
+    if (!activeParty || !watchPartyRoot) return;
+    const stateUrl = watchPartyUrl(watchPartyRoot.dataset.stateTemplate, activeParty.code);
+    if (!stateUrl) return;
+
+    try {
+      const response = await fetch(stateUrl, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      });
+
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 403) {
+          activeParty = null;
+          clearInterval(partyPollTimer);
+          renderWatchPartyPanel();
+        }
+        return;
+      }
+
+      const payload = await response.json();
+      if (!payload.ok || !payload.party) return;
+      ingestWatchPartyPayload(payload);
+      applyRemotePartyState(activeParty);
+    } catch (error) {
+      // Ignorado para no interrumpir la reproduccion local.
+    }
+  }
+
+  function ensureWatchPartyPolling() {
+    clearInterval(partyPollTimer);
+    if (!activeParty || partySocketConnected) return;
+    partyPollTimer = window.setInterval(refreshWatchPartyState, 1200);
+  }
+
+  async function activateWatchParty(party) {
+    ingestWatchPartyPayload({ party });
+    partySocketReconnectAttempts = 0;
+    connectWatchPartySocket();
+    ensureWatchPartyPolling();
+    await refreshWatchPartyState();
   }
 
   function syncControls() {
@@ -373,7 +918,7 @@
   }
 
   function tryAutoplayPreview() {
-    if (!player.currentSrc || resumeSeconds > 0) return;
+    if (!player.currentSrc || resumeSeconds > 0 || activeParty || bootstrappedPartyCode) return;
     previewForcedMute = true;
     player.muted = true;
     player.currentTime = 0;
@@ -463,6 +1008,7 @@
   }
 
   async function startPlayback() {
+    if (!guardPartyControl()) return;
     stopPreview();
     await player.play().catch(() => {});
     enterMobileCinemaMode();
@@ -519,6 +1065,7 @@
   }
 
   function togglePlayback() {
+    if (!guardPartyControl()) return;
     if (player.paused) {
       startPlayback();
     } else {
@@ -531,6 +1078,7 @@
   }
 
   function jumpBy(seconds) {
+    if (!guardPartyControl()) return;
     const duration = Number.isFinite(player.duration) ? player.duration : 0;
     const nextTime = Math.min(Math.max((player.currentTime || 0) + seconds, 0), duration || Infinity);
     player.currentTime = nextTime;
@@ -547,6 +1095,7 @@
     player.muted = nextVolume === 0;
     syncControls();
     syncMeters();
+    persistPlayerSettings();
     showMeters('right', 2600);
     if (!usesTouchPlayerUI()) {
       showVolumePopover();
@@ -563,6 +1112,7 @@
     brightnessLevel = Math.min(0.55, Math.max(0, brightnessLevel + (deltaY / 900)));
     syncBrightnessLayer();
     syncMeters();
+    persistPlayerSettings();
     showMeters('left', 2600);
     showHud(`Brillo ${Math.round((1 - brightnessLevel / 0.55) * 100)}%`);
     if (!usesTouchPlayerUI() || !isPlayerFullscreen()) {
@@ -576,6 +1126,7 @@
     player.muted = !player.muted;
     syncControls();
     syncMeters();
+    persistPlayerSettings();
     showMeters('right', 2600);
     if (!usesTouchPlayerUI()) {
       showVolumePopover();
@@ -670,8 +1221,130 @@
     }).catch(() => {});
   }
 
+  function updateWatchPartyUrl(code) {
+    const nextUrl = new URL(window.location.href);
+    if (code) {
+      nextUrl.searchParams.set('party', code);
+    } else {
+      nextUrl.searchParams.delete('party');
+    }
+    window.history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+  }
+
+  async function createWatchParty() {
+    if (!watchPartyRoot) return;
+
+    try {
+      const response = await fetch(watchPartyRoot.dataset.createUrl, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrfToken,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok || !payload.party) {
+        showHud('No se pudo crear la sala');
+        return;
+      }
+      ingestWatchPartyPayload(payload);
+      await activateWatchParty(payload.party);
+      updateWatchPartyUrl(payload.party.code);
+      if (watchPartyCodeInput) {
+        watchPartyCodeInput.value = payload.party.code;
+      }
+      sendWatchPartySync(player.paused ? 'paused' : 'playing');
+      showHud(`Sala ${payload.party.code} creada`);
+    } catch (error) {
+      showHud('No se pudo crear la sala');
+    }
+  }
+
+  async function joinWatchParty(code) {
+    if (!watchPartyRoot || !code) return;
+
+    try {
+      const response = await fetch(watchPartyRoot.dataset.joinUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({ code }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok || !payload.party) {
+        showHud('Codigo de sala no valido');
+        return;
+      }
+      ingestWatchPartyPayload(payload);
+      await activateWatchParty(payload.party);
+      updateWatchPartyUrl(payload.party.code);
+      if (watchPartyCodeInput) {
+        watchPartyCodeInput.value = payload.party.code;
+      }
+      showHud(`Te uniste a ${payload.party.code}`);
+    } catch (error) {
+      showHud('No se pudo unir la sala');
+    }
+  }
+
+  async function leaveWatchParty() {
+    if (!activeParty || !watchPartyRoot) return;
+    const leaveUrl = watchPartyUrl(watchPartyRoot.dataset.leaveTemplate, activeParty.code);
+    if (!leaveUrl) return;
+
+    try {
+      const response = await fetch(leaveUrl, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrfToken,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) {
+        showHud('No se pudo salir de la sala');
+        return;
+      }
+      const wasHost = Boolean(activeParty.can_control);
+      disconnectWatchPartySocket();
+      activeParty = null;
+      activePartyMessages = [];
+      clearInterval(partyPollTimer);
+      renderWatchPartyPanel();
+      updateWatchPartyUrl('');
+      showHud(wasHost ? 'Sala cerrada' : 'Saliste de la sala');
+    } catch (error) {
+      showHud('No se pudo salir de la sala');
+    }
+  }
+
+  async function copyWatchPartyInvite() {
+    if (!activeParty || !activeParty.invite_url) return;
+    try {
+      await navigator.clipboard.writeText(activeParty.invite_url);
+      showHud('Link copiado');
+    } catch (error) {
+      showHud('No se pudo copiar el link');
+    }
+  }
+
+  function toggleWatchPartyControlMode() {
+    if (!activeParty || !activeParty.is_host) return;
+    const nextMode = activeParty.control_mode === 'shared' ? 'host' : 'shared';
+    if (!sendWatchPartySocketEvent({
+      type: 'control_mode',
+      control_mode: nextMode,
+    })) {
+      showHud('La sala aun esta conectando');
+    }
+  }
+
   if (resumeBtn) {
     resumeBtn.addEventListener('click', function () {
+      if (!guardPartyControl()) return;
       const jump = Math.max(0, resumeSeconds - 2);
       if (jump > 0) {
         player.currentTime = jump;
@@ -724,6 +1397,7 @@
       player.muted = value === 0;
       syncControls();
       syncMeters();
+      persistPlayerSettings();
       showMeters('right', 2600);
       showVolumePopover();
       showHud(`Vol ${value}%`);
@@ -749,11 +1423,56 @@
 
   if (seekInput) {
     seekInput.addEventListener('input', function () {
+      if (!guardPartyControl()) return;
       const nextTime = Number(seekInput.value || 0);
       if (Number.isFinite(nextTime)) {
         player.currentTime = nextTime;
         syncControls();
       }
+    });
+  }
+
+  if (watchPartyCreateBtn) {
+    watchPartyCreateBtn.addEventListener('click', createWatchParty);
+  }
+
+  if (watchPartyJoinForm) {
+    watchPartyJoinForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      const code = (watchPartyCodeInput?.value || '').trim().toUpperCase();
+      if (!code) {
+        showHud('Escribe el codigo de la sala');
+        return;
+      }
+      joinWatchParty(code);
+    });
+  }
+
+  if (watchPartyCopyBtn) {
+    watchPartyCopyBtn.addEventListener('click', copyWatchPartyInvite);
+  }
+
+  if (watchPartyControlModeBtn) {
+    watchPartyControlModeBtn.addEventListener('click', toggleWatchPartyControlMode);
+  }
+
+  if (watchPartyLeaveBtn) {
+    watchPartyLeaveBtn.addEventListener('click', leaveWatchParty);
+  }
+
+  if (watchPartyChatForm) {
+    watchPartyChatForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      const text = (watchPartyChatInput?.value || '').trim();
+      if (!activeParty || !text) return;
+      if (!sendWatchPartySocketEvent({
+        type: 'chat_message',
+        text,
+      })) {
+        showHud('La sala aun esta conectando');
+        return;
+      }
+      watchPartyChatInput.value = '';
     });
   }
 
@@ -919,16 +1638,38 @@
         hideOverlay();
       }
     }, isPlayerFullscreen() ? 1100 : 1450);
+    if (activeParty && activeParty.can_control && !remotePartySync && !isPreviewing) {
+      sendWatchPartySync('playing');
+    }
   });
   player.addEventListener('pause', function () {
     syncControls();
     keepOverlayVisible();
+    if (activeParty && activeParty.can_control && !remotePartySync && !isPreviewing) {
+      sendWatchPartySync('paused');
+    }
   });
 
   player.addEventListener('timeupdate', function () {
     syncControls();
     if (Math.floor(player.currentTime) % 12 === 0) {
       sendProgress(false);
+    }
+    if (
+      activeParty &&
+      activeParty.can_control &&
+      !remotePartySync &&
+      !player.paused &&
+      Date.now() - partyHeartbeatAt > 1400
+    ) {
+      partyHeartbeatAt = Date.now();
+      sendWatchPartySync('playing');
+    }
+  });
+
+  player.addEventListener('seeked', function () {
+    if (activeParty && activeParty.can_control && !remotePartySync) {
+      sendWatchPartySync(player.paused ? 'paused' : 'playing');
     }
   });
 
@@ -938,14 +1679,28 @@
   player.addEventListener('ended', function () {
     stopPreview();
     sendProgress(true);
+    if (activeParty && activeParty.can_control) {
+      sendWatchPartySync('paused');
+    }
   });
-  window.addEventListener('beforeunload', function () { sendProgress(true); });
+  window.addEventListener('beforeunload', function () {
+    sendProgress(true);
+    disconnectWatchPartySocket();
+  });
   syncBrightnessLayer();
   syncMeters();
   syncImmersiveState();
   syncControls();
+  renderWatchPartyPanel();
   keepOverlayVisible();
   showMeters('both');
+  if (activeParty) {
+    connectWatchPartySocket();
+    ensureWatchPartyPolling();
+    refreshWatchPartyState();
+  } else if (bootstrappedPartyCode) {
+    joinWatchParty(bootstrappedPartyCode);
+  }
 })();
 </script>
 {% endblock %}
