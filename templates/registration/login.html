@@ -3,36 +3,52 @@
 {% block body_class %}{% if auth_scope == 'admin' %}admin-page{% endif %}{% endblock %}
 {% block scene_theme %}{% if auth_scope == 'admin' %}admin{% else %}member{% endif %}{% endblock %}
 {% block scene_kicker %}{% if auth_scope == 'admin' %}Control Room{% else %}Bienvenido de nuevo{% endif %}{% endblock %}
-{% block scene_title %}{% if auth_scope == 'admin' %}Administra catalogo, usuarios y actividad{% else %}Vuelve a tu cine en casa{% endif %}{% endblock %}
+{% block scene_title %}{% if auth_scope == 'admin' %}Administra catálogo, usuarios y actividad{% else %}Vuelve a tu cine en casa{% endif %}{% endblock %}
+
 {% block content %}
 <section class="auth-wrap glass {% if auth_scope == 'admin' %}admin-auth{% endif %}">
-  <span class="section-kicker">{% if auth_scope == 'admin' %}Acceso administrativo{% else %}Acceso de usuario{% endif %}</span>
-  <h1>{% if auth_scope == 'admin' %}Entrar al panel de administracion{% else %}Bienvenido de nuevo{% endif %}</h1>
-  <p class="muted">{% if auth_scope == 'admin' %}Usa una cuenta con permisos de administrador para entrar al panel privado.{% else %}Inicia sesion para ver tu catalogo, seguir viendo y entrar a tu perfil.{% endif %}</p>
+
+  <div class="auth-header">
+    <p class="eyebrow">{% if auth_scope == 'admin' %}Acceso administrativo{% else %}Acceso de usuario{% endif %}</p>
+    <h1>{% if auth_scope == 'admin' %}Panel de administración{% else %}Bienvenido de nuevo{% endif %}</h1>
+    <p class="muted" style="font-size:0.88rem;">{% if auth_scope == 'admin' %}Usa una cuenta con permisos de administrador.{% else %}Inicia sesión para ver tu catálogo y seguir viendo.{% endif %}</p>
+  </div>
 
   {% if form.non_field_errors %}
-    <div class="form-errors">{{ form.non_field_errors }}</div>
+    <div class="flash flash-error">{{ form.non_field_errors }}</div>
   {% endif %}
 
-  <form method="post" class="auth-form">
+  <form method="post" class="auth-form" novalidate>
     {% csrf_token %}
-    <label>Usuario</label>
-    {{ form.username }}
-    {% if form.username.errors %}<small class="field-error">{{ form.username.errors|striptags }}</small>{% endif %}
 
-    <label>Contrasena</label>
-    {{ form.password }}
-    {% if form.password.errors %}<small class="field-error">{{ form.password.errors|striptags }}</small>{% endif %}
+    <div>
+      <label for="id_username">Usuario</label>
+      {{ form.username }}
+      {% if form.username.errors %}<small class="field-error">{{ form.username.errors|striptags }}</small>{% endif %}
+    </div>
+
+    <div>
+      <label for="id_password">Contraseña</label>
+      {{ form.password }}
+      {% if form.password.errors %}<small class="field-error">{{ form.password.errors|striptags }}</small>{% endif %}
+    </div>
 
     <input type="hidden" name="auth_scope" value="{{ auth_scope|default:'user' }}">
     {% if request.GET.next %}<input type="hidden" name="next" value="{{ request.GET.next }}">{% endif %}
-    <button type="submit" class="btn-primary">{% if auth_scope == 'admin' %}Entrar al panel{% else %}Entrar{% endif %}</button>
+
+    <button type="submit" class="btn-primary" style="width:100%;justify-content:center;margin-top:0.4rem;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10,17 15,12 10,7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+      {% if auth_scope == 'admin' %}Entrar al panel{% else %}Entrar{% endif %}
+    </button>
   </form>
 
-  {% if auth_scope == 'admin' %}
-    <p class="muted">Si solo quieres ver contenido, entra desde <a href="{% url 'login' %}">el acceso de usuarios</a>.</p>
-  {% else %}
-    <p class="muted">No tienes cuenta? <a href="{% url 'signup' %}">Registrate aqui</a></p>
-  {% endif %}
+  <p class="muted" style="text-align:center;font-size:0.85rem;margin-top:1rem;">
+    {% if auth_scope == 'admin' %}
+      ¿Solo quieres ver contenido? <a href="{% url 'login' %}" style="color:var(--primary-light);">Acceso de usuarios</a>
+    {% else %}
+      ¿No tienes cuenta? <a href="{% url 'signup' %}" style="color:var(--primary-light);">Regístrate aquí</a>
+    {% endif %}
+  </p>
+
 </section>
 {% endblock %}

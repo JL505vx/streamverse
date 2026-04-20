@@ -68,27 +68,27 @@ if (canvas) {
 
   const palette = {
     audience: {
-      accent: 0xffc145,
-      secondary: 0xff6b6b,
-      cool: 0x5bb8ff,
-      glow: 0x1f2f73,
+      accent: 0x0ea5e9,
+      secondary: 0x06b6d4,
+      cool: 0x38bdf8,
+      glow: 0x0a1e3a,
     },
     member: {
-      accent: 0xff5f7a,
-      secondary: 0xffbe0b,
-      cool: 0x7bc4ff,
-      glow: 0x1b2c63,
+      accent: 0x6366f1,
+      secondary: 0x0ea5e9,
+      cool: 0x38bdf8,
+      glow: 0x0d1a3a,
     },
     admin: {
-      accent: 0x7bc4ff,
-      secondary: 0xffbe0b,
-      cool: 0xa0f0ff,
-      glow: 0x16244c,
+      accent: 0x38bdf8,
+      secondary: 0x6366f1,
+      cool: 0x7dd3fc,
+      glow: 0x0a1630,
     },
   };
   const colors = palette[theme] || palette.audience;
 
-  scene.add(new THREE.AmbientLight(0xffe8c7, isMobile ? 1.75 : 1.55));
+  scene.add(new THREE.AmbientLight(0xb8d4f8, isMobile ? 1.75 : 1.55));
 
   const keyLight = new THREE.PointLight(colors.secondary, isMobile ? 13 : 11.5, 32, 2);
   keyLight.position.set(-5.2, 4.3, 5.8);

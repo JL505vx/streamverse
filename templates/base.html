@@ -3,11 +3,12 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{% block title %}App Peliculas{% endblock %}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#020509">
+  <title>{% block title %}StreamVerse{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'css/main.css' %}">
   {% block extra_head %}{% endblock %}
 </head>
@@ -16,6 +17,8 @@
   data-scene-theme="{% block scene_theme %}audience{% endblock %}"
   data-scene-mode="{% block scene_mode %}default{% endblock %}"
 >
+
+  <!-- Background stage -->
   <div class="cinema-stage" aria-hidden="true">
     <canvas id="cinema-scene"></canvas>
     <div class="cinema-glow cinema-glow-left"></div>
@@ -26,14 +29,19 @@
     </div>
   </div>
   <div class="bg-overlay"></div>
-  <header class="topbar glass">
-    <a class="brand" href="{% if user.is_authenticated and user.is_staff %}{% url 'admin_panel' %}{% else %}{% url 'home' %}{% endif %}">StreamVerse</a>
-    <nav class="nav-links">
+
+  <!-- Topbar -->
+  <header class="topbar glass" role="banner">
+    <a class="brand" href="{% if user.is_authenticated and user.is_staff %}{% url 'admin_panel' %}{% else %}{% url 'home' %}{% endif %}" aria-label="StreamVerse – Inicio">
+      StreamVerse
+    </a>
+
+    <nav class="nav-links" aria-label="Navegación principal">
       {% if user.is_authenticated %}
         {% if user.is_staff %}
-          <span class="chip">Admin: {{ user.username }}</span>
+          <span class="chip">{{ user.username }}</span>
           <a href="{% url 'admin_panel' %}">Panel</a>
-          <a href="{% url 'home' %}" class="admin-switch">Inicio publico</a>
+          <a href="{% url 'home' %}" class="admin-switch">Vista pública</a>
         {% else %}
           <a href="{% url 'user_dashboard' %}">Mi espacio</a>
           <a href="{% url 'user_settings' %}">Ajustes</a>
@@ -52,9 +60,10 @@
     </nav>
   </header>
 
-  <main class="container">
+  <!-- Main content -->
+  <main class="container" id="main-content">
     {% if messages %}
-      <div class="flash-wrap">
+      <div class="flash-wrap" role="alert" aria-live="polite">
       {% for message in messages %}
         <div class="flash flash-{{ message.tags|default:'info' }}">{{ message }}</div>
       {% endfor %}
@@ -62,32 +71,63 @@
     {% endif %}
     {% block content %}{% endblock %}
   </main>
+
+  <!-- Mobile bottom dock (authenticated users only) -->
   {% if user.is_authenticated and not user.is_staff %}
-  <nav class="mobile-dock glass" aria-label="Navegacion rapida">
-    <a href="{% url 'home' %}" class="mobile-dock-link">
-      <span class="mobile-dock-icon">Inicio</span>
+  <nav class="mobile-dock" aria-label="Navegación rápida">
+
+    <a href="{% url 'home' %}" class="mobile-dock-link" aria-label="Inicio">
+      <span class="mobile-dock-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><polyline points="9,21 9,12 15,12 15,21"/></svg>
+      </span>
       <small>Inicio</small>
     </a>
-    <a href="{% url 'user_dashboard' %}" class="mobile-dock-link">
-      <span class="mobile-dock-icon">Mi</span>
+
+    <a href="{% url 'user_dashboard' %}" class="mobile-dock-link" aria-label="Mi espacio">
+      <span class="mobile-dock-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+      </span>
       <small>Mi espacio</small>
     </a>
-    <a href="{% url 'user_settings' %}" class="mobile-dock-link">
-      <span class="mobile-dock-icon">Perfil</span>
-      <small>Ajustes</small>
+
+    <a href="{% url 'user_settings' %}" class="mobile-dock-link" aria-label="Ajustes">
+      <span class="mobile-dock-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      </span>
+      <small>Perfil</small>
     </a>
+
     <form method="post" action="{% url 'logout' %}" class="mobile-dock-link mobile-dock-form">
       {% csrf_token %}
       <input type="hidden" name="auth_scope" value="user">
-      <button type="submit" class="mobile-dock-button">
-        <span class="mobile-dock-icon">Salir</span>
+      <button type="submit" class="mobile-dock-button" aria-label="Cerrar sesión">
+        <span class="mobile-dock-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </span>
         <small>Salir</small>
       </button>
     </form>
+
   </nav>
   {% endif %}
+
+  <!-- Scripts -->
   <script type="module" src="{% static 'js/cinema-scene.js' %}"></script>
   <script src="{% static 'js/rail-carousel.js' %}"></script>
+
+  <!-- Scroll reveal -->
+  <script>
+  (function(){
+    if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){ e.target.classList.add('is-visible'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.08 });
+    document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+  })();
+  </script>
+
   {% block extra_scripts %}{% endblock %}
 </body>
 </html>
