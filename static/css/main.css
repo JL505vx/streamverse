@@ -2952,3 +2952,1028 @@ code {
     grid-template-columns: 1.15fr 0.5fr 0.32fr;
   }
 }
+
+/* ============================================================
+   STREAMVERSE — Cinematic Effects Layer v1.0
+   Entry · Countdown · Particles · Shimmer · Reveals
+   ============================================================ */
+
+/* ── Cinema BG Canvas ────────────────────────────────────── */
+#cinema-bg {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 1;
+  will-change: contents;
+}
+
+/* ── Scroll progress bar ────────────────────────────────── */
+#sv-scroll-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 0%;
+  background: linear-gradient(90deg, var(--primary), var(--cyan));
+  z-index: 9999;
+  border-radius: 0 var(--r-full) var(--r-full) 0;
+  box-shadow: 0 0 8px rgba(14, 165, 233, 0.7);
+  pointer-events: none;
+  transition: width 60ms linear;
+}
+
+/* ── Cinema Entry Overlay ────────────────────────────────── */
+.sv-entry-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  background: #000;
+  pointer-events: none;
+  animation: svEntryFade 2s var(--ease-out) forwards;
+}
+
+@keyframes svEntryFade {
+  0%   { opacity: 1; }
+  55%  { opacity: 0.25; }
+  100% { opacity: 0; visibility: hidden; }
+}
+
+/* ── Cinematic Countdown Overlay ─────────────────────────── */
+.sv-countdown {
+  position: fixed;
+  inset: 0;
+  z-index: 7000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.4rem;
+  background: rgba(1, 4, 14, 0.94);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  animation: svCountdownIn 0.5s var(--ease-spring);
+}
+
+@keyframes svCountdownIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.sv-countdown--hiding {
+  animation: svCountdownOut 0.7s var(--ease-out) forwards;
+}
+
+@keyframes svCountdownOut {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.04); pointer-events: none; }
+}
+
+/* Countdown decorative top bar */
+.sv-countdown::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    var(--primary) 20%,
+    var(--cyan) 50%,
+    var(--primary) 80%,
+    transparent 100%
+  );
+  animation: svScanline 3s ease-in-out infinite;
+}
+
+@keyframes svScanline {
+  0%   { opacity: 0.4; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.4; }
+}
+
+.sv-countdown__eyebrow {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  opacity: 0.8;
+}
+
+.sv-countdown__ring {
+  position: relative;
+  width: 130px;
+  height: 130px;
+  filter: drop-shadow(0 0 16px rgba(14, 165, 233, 0.4));
+}
+
+.sv-countdown__ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.countdown-ring-track {
+  fill: none;
+  stroke: rgba(14, 165, 233, 0.12);
+  stroke-width: 3;
+}
+
+.countdown-ring-fill {
+  fill: none;
+  stroke: url(#countdown-grad);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 276.46;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 0.95s linear;
+}
+
+.sv-countdown__number {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 3.8rem;
+  color: #fff;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 30px rgba(14, 165, 233, 0.5);
+  animation: svNumberPop 0.3s var(--ease-spring);
+}
+
+@keyframes svNumberPop {
+  0%   { transform: scale(0.85); }
+  60%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+.sv-countdown__title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: rgba(232, 244, 253, 0.6);
+  letter-spacing: 0.06em;
+  text-align: center;
+  min-height: 1.5rem;
+  transition: opacity 0.3s ease;
+}
+
+.sv-countdown__skip {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.sv-countdown__skip.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Film strip decoration below ring */
+.sv-countdown__filmstrip {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  opacity: 0.3;
+}
+
+.sv-countdown__filmstrip span {
+  display: block;
+  width: 18px;
+  height: 12px;
+  border: 1px solid rgba(14, 165, 233, 0.5);
+  border-radius: 2px;
+  position: relative;
+}
+
+.sv-countdown__filmstrip span::before,
+.sv-countdown__filmstrip span::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  height: 2px;
+  background: rgba(14, 165, 233, 0.4);
+  border-radius: 1px;
+}
+
+.sv-countdown__filmstrip span::before { top: 1px; }
+.sv-countdown__filmstrip span::after  { bottom: 1px; }
+
+/* ── Enhanced Buttons ────────────────────────────────────── */
+
+/* Shimmer sweep effect */
+.btn-primary {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  transition: transform 0s;
+}
+
+.btn-primary.is-shimmering::after {
+  transform: translateX(100%);
+  transition: transform 0.55s ease;
+}
+
+/* Gradient glow pulse on .btn-primary */
+@keyframes btnGlowPulse {
+  0%, 100% { box-shadow: 0 4px 18px var(--primary-glow), 0 1px 3px rgba(0,0,0,0.3); }
+  50%       { box-shadow: 0 6px 28px rgba(14, 165, 233, 0.45), 0 2px 8px rgba(0,0,0,0.3); }
+}
+
+/* Transparent variant: btn with strong glass effect */
+.btn-glass {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  text-decoration: none;
+  border-radius: var(--r-sm);
+  padding: 0.65rem 1.1rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-height: 44px;
+  cursor: pointer;
+  font-family: inherit;
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(14, 165, 233, 0.22);
+  color: var(--text);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+  transition: background var(--t-fast), border-color var(--t-fast), transform var(--t-fast) var(--ease-spring), box-shadow var(--t-fast);
+  white-space: nowrap;
+}
+
+.btn-glass:hover {
+  background: rgba(14, 165, 233, 0.16);
+  border-color: rgba(14, 165, 233, 0.45);
+  color: #fff;
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 22px rgba(14, 165, 233, 0.22), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+.btn-glass:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Neon outlined button */
+.btn-neon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  text-decoration: none;
+  border-radius: var(--r-sm);
+  padding: 0.65rem 1.1rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-height: 44px;
+  cursor: pointer;
+  font-family: inherit;
+  background: transparent;
+  border: 1px solid var(--primary);
+  color: var(--primary-light);
+  position: relative;
+  overflow: hidden;
+  transition: color var(--t-fast), transform var(--t-fast) var(--ease-spring);
+  white-space: nowrap;
+}
+
+.btn-neon::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--primary), var(--cyan));
+  opacity: 0;
+  transition: opacity var(--t-fast);
+}
+
+.btn-neon:hover::before { opacity: 0.12; }
+.btn-neon:hover {
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 0 16px rgba(14, 165, 233, 0.35);
+}
+
+/* ── Film Strip Progress Bar ─────────────────────────────── */
+.player-seek {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 5px;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  background: transparent;
+  outline: none;
+}
+
+.player-seek::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: var(--r-full);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 10px,
+      rgba(255,255,255,0.06) 10px,
+      rgba(255,255,255,0.06) 12px
+    ),
+    rgba(255, 255, 255, 0.10);
+}
+
+.player-seek::-moz-range-track {
+  height: 5px;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.player-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 30%, var(--primary) 100%);
+  box-shadow: 0 0 10px rgba(14, 165, 233, 0.8);
+  cursor: pointer;
+  margin-top: -4px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.player-seek:hover::-webkit-slider-thumb {
+  transform: scale(1.3);
+  box-shadow: 0 0 16px rgba(14, 165, 233, 1);
+}
+
+.player-seek::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 10px rgba(14, 165, 233, 0.8);
+  cursor: pointer;
+  border: none;
+}
+
+/* Film strip marker dots on seek bar */
+.player-seek-wrap {
+  position: relative;
+}
+
+/* ── Staggered Reveals ───────────────────────────────────── */
+.reveal-stagger > * {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity var(--t-slow) var(--ease-spring),
+    transform var(--t-slow) var(--ease-spring);
+}
+
+.reveal-stagger.is-visible > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Delays generated for up to 8 children */
+.reveal-stagger.is-visible > *:nth-child(1) { transition-delay:   0ms; }
+.reveal-stagger.is-visible > *:nth-child(2) { transition-delay:  70ms; }
+.reveal-stagger.is-visible > *:nth-child(3) { transition-delay: 140ms; }
+.reveal-stagger.is-visible > *:nth-child(4) { transition-delay: 210ms; }
+.reveal-stagger.is-visible > *:nth-child(5) { transition-delay: 280ms; }
+.reveal-stagger.is-visible > *:nth-child(6) { transition-delay: 350ms; }
+.reveal-stagger.is-visible > *:nth-child(7) { transition-delay: 420ms; }
+.reveal-stagger.is-visible > *:nth-child(8) { transition-delay: 490ms; }
+
+/* ── Section slide-from-bottom ───────────────────────────── */
+.reveal-up {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.55s var(--ease-spring),
+    transform 0.55s var(--ease-spring);
+}
+
+.reveal-up.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Cinematic Glow on Player ────────────────────────────── */
+.player-frame.is-active::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: var(--r-md);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.35), rgba(6, 182, 212, 0.2));
+  z-index: -1;
+  filter: blur(12px);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.player-frame.is-active:hover::before {
+  opacity: 1;
+}
+
+/* ── Dynamic Neon Card Glow ──────────────────────────────── */
+.poster:hover::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: calc(var(--r-md) + 1px);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.3), rgba(99, 102, 241, 0.2));
+  z-index: -1;
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+/* ── Ambient light blobs (decorative, fixed) ─────────────── */
+.sv-ambient {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(100px);
+  z-index: 0;
+  will-change: transform;
+  animation: svAmbientDrift 20s ease-in-out infinite;
+}
+
+.sv-ambient--a {
+  width: 400px; height: 400px;
+  top: -80px; left: -80px;
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.12), transparent 70%);
+  animation-duration: 22s;
+}
+
+.sv-ambient--b {
+  width: 320px; height: 320px;
+  bottom: -60px; right: -60px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.1), transparent 70%);
+  animation-duration: 18s;
+  animation-direction: reverse;
+}
+
+.sv-ambient--c {
+  width: 280px; height: 280px;
+  top: 40%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.06), transparent 70%);
+  animation-duration: 26s;
+}
+
+@keyframes svAmbientDrift {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(20px, -15px) scale(1.06); }
+  66%  { transform: translate(-12px, 18px) scale(0.96); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+.sv-ambient--a { animation-name: svAmbientDrift; }
+.sv-ambient--b {
+  animation-name: svAmbientDrift;
+  animation-direction: reverse;
+}
+.sv-ambient--c {
+  animation-name: svAmbientDrift;
+  animation-duration: 26s;
+}
+
+/* ── Watch Party Section ─────────────────────────────────── */
+.watch-party-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 1.2rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1rem;
+}
+
+.watch-party-head h2 {
+  font-size: clamp(1.1rem, 2vw, 1.4rem);
+  margin-bottom: 0.2rem;
+}
+
+.watch-party-join {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.watch-party-join-form {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.watch-party-code-input {
+  width: 160px;
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.watch-party-live {
+  display: grid;
+  gap: 1rem;
+}
+
+.watch-party-live-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.watch-party-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.3rem;
+}
+
+.watch-party-badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: var(--primary-bg);
+  border: 1px solid rgba(14, 165, 233, 0.25);
+  color: var(--primary-light);
+  border-radius: var(--r-full);
+  padding: 0.22rem 0.6rem;
+}
+
+.watch-party-connection {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.watch-party-connection.is-connected {
+  color: #34d399;
+}
+
+.watch-party-live-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.watch-party-live-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.watch-party-live-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 0.9rem;
+  background: rgba(7, 17, 32, 0.6);
+  display: grid;
+  gap: 0.2rem;
+}
+
+.watch-party-live-card > span {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+
+.watch-party-live-card > strong {
+  font-size: 1rem;
+}
+
+.watch-party-live-card > small {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.watch-party-member-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.3rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+/* Chat */
+.watch-party-chat-shell {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.watch-party-chat-head {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.watch-party-chat-head strong { font-size: 0.9rem; }
+
+.watch-party-chat-log {
+  min-height: 140px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.watch-party-chat-empty {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  margin: auto;
+  text-align: center;
+}
+
+.watch-party-chat-form {
+  display: flex;
+  gap: 0.45rem;
+  padding: 0.6rem 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.watch-party-chat-form .form-input {
+  flex: 1;
+  margin: 0;
+}
+
+/* ── Related carousel shell ──────────────────────────────── */
+.related-carousel-shell {
+  border-radius: var(--r-xl);
+  padding: 1.2rem 1.4rem;
+  margin-top: 1rem;
+}
+
+.related-head { margin-bottom: 0; }
+
+/* ── Title reveal class ──────────────────────────────────── */
+.sv-title-reveal { overflow: hidden; }
+
+/* ── Cinematic page transition ───────────────────────────── */
+@keyframes svPageIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.container {
+  animation: svPageIn 0.55s var(--ease-spring);
+}
+
+/* ── Mobile dock improvements ────────────────────────────── */
+@media (max-width: 640px) {
+  .watch-party-live-grid {
+    grid-template-columns: 1fr;
+  }
+  .watch-party-head {
+    flex-direction: column;
+  }
+  .watch-party-join {
+    width: 100%;
+  }
+  .watch-party-join-form {
+    flex: 1;
+  }
+  .watch-party-code-input {
+    flex: 1;
+    width: auto;
+  }
+}
+
+/* ── Cinematic Poster hover (tilt) ───────────────────────── */
+.poster {
+  transform-style: preserve-3d;
+  perspective: 600px;
+}
+
+/* ── Accessibility: reduce all animation for low-motion ──── */
+@media (prefers-reduced-motion: reduce) {
+  .sv-entry-overlay,
+  .sv-countdown,
+  .sv-countdown--hiding,
+  .sv-ambient,
+  .container,
+  .reveal-stagger > *,
+  .reveal-up { animation: none !important; transition: none !important; }
+
+  .sv-entry-overlay { display: none; }
+  #cinema-bg { display: none; }
+}
+
+/* =========================================================
+   STREAMVERSE CINEMATIC V3
+   Narrative context + premium detail page + cinema room player
+   ========================================================= */
+
+body {
+  --cinema-r: 248;
+  --cinema-g: 68;
+  --cinema-b: 122;
+  --cinema-r2: 58;
+  --cinema-g2: 152;
+  --cinema-b2: 255;
+  --cinema-ambient-a: rgba(var(--cinema-r), var(--cinema-g), var(--cinema-b), 0.16);
+  --cinema-ambient-b: rgba(var(--cinema-r2), var(--cinema-g2), var(--cinema-b2), 0.16);
+}
+
+body[data-cinema-context='lobby'] {
+  --cinema-ambient-a: rgba(var(--cinema-r), var(--cinema-g), var(--cinema-b), 0.13);
+  --cinema-ambient-b: rgba(var(--cinema-r2), var(--cinema-g2), var(--cinema-b2), 0.1);
+}
+
+body[data-cinema-context='billboard'] {
+  --cinema-ambient-a: rgba(var(--cinema-r), var(--cinema-g), var(--cinema-b), 0.22);
+  --cinema-ambient-b: rgba(var(--cinema-r2), var(--cinema-g2), var(--cinema-b2), 0.22);
+}
+
+body[data-cinema-context='screening'] {
+  --cinema-ambient-a: rgba(var(--cinema-r), var(--cinema-g), var(--cinema-b), 0.28);
+  --cinema-ambient-b: rgba(var(--cinema-r2), var(--cinema-g2), var(--cinema-b2), 0.24);
+}
+
+body[data-cinema-context='archive'] {
+  --cinema-ambient-a: rgba(120, 130, 158, 0.12);
+  --cinema-ambient-b: rgba(88, 102, 136, 0.1);
+}
+
+.bg-overlay::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -2;
+  background:
+    radial-gradient(50rem 30rem at 12% 24%, var(--cinema-ambient-a), transparent 65%),
+    radial-gradient(58rem 35rem at 88% 20%, var(--cinema-ambient-b), transparent 68%);
+  transition: background 420ms ease-out;
+}
+
+.movie-presentation-page .container,
+.movie-watch-page .container {
+  max-width: 1180px;
+}
+
+.movie-presentation {
+  display: grid;
+  grid-template-columns: minmax(280px, 36%) 1fr;
+  gap: clamp(1.1rem, 2.2vw, 1.8rem);
+  align-items: stretch;
+  border-radius: var(--r-xl);
+  padding: clamp(1.1rem, 2.2vw, 1.8rem);
+  overflow: hidden;
+  position: relative;
+}
+
+.movie-presentation::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(120deg, rgba(58, 152, 255, 0.12), transparent 35%),
+    linear-gradient(300deg, rgba(248, 68, 122, 0.12), transparent 35%);
+}
+
+.movie-presentation-media {
+  position: relative;
+  min-height: 410px;
+  border-radius: calc(var(--r-xl) - 4px);
+  overflow: hidden;
+  border: 1px solid rgba(130, 156, 202, 0.24);
+  background: linear-gradient(180deg, rgba(5, 10, 22, 0.85), rgba(3, 6, 14, 0.96));
+}
+
+.movie-presentation-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.movie-presentation-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(4rem, 10vw, 7rem);
+  color: rgba(217, 233, 255, 0.8);
+}
+
+.movie-presentation-glow {
+  position: absolute;
+  inset: auto 6% -2rem 6%;
+  height: 7rem;
+  filter: blur(26px);
+  background: linear-gradient(90deg, rgba(248, 68, 122, 0.24), rgba(58, 152, 255, 0.24));
+}
+
+.movie-presentation-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 0.9rem;
+  align-content: center;
+}
+
+.movie-presentation-copy h1 {
+  font-size: clamp(2.2rem, 6.2vw, 4.2rem);
+  margin: 0;
+}
+
+.movie-presentation-meta {
+  margin: 0;
+  color: rgba(196, 212, 236, 0.92);
+}
+
+.movie-presentation-synopsis {
+  margin: 0;
+  max-width: 70ch;
+  color: rgba(216, 229, 247, 0.9);
+}
+
+.movie-presentation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.movie-presentation-actions form {
+  margin: 0;
+}
+
+.movie-presentation-note {
+  margin-top: 0.2rem;
+  border: 1px solid rgba(130, 156, 202, 0.22);
+  border-radius: var(--r-md);
+  padding: 0.72rem 0.9rem;
+  background: rgba(7, 13, 28, 0.72);
+}
+
+.movie-presentation-note p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(188, 205, 230, 0.9);
+}
+
+.cinema-room-shell .player-main {
+  border-color: rgba(90, 122, 166, 0.34);
+  background:
+    radial-gradient(36rem 18rem at 50% -8%, rgba(248, 68, 122, 0.08), transparent 70%),
+    radial-gradient(35rem 19rem at 52% -16%, rgba(58, 152, 255, 0.09), transparent 72%),
+    rgba(2, 6, 18, 0.72);
+}
+
+.movie-watch-page .player-frame {
+  border: 1px solid rgba(110, 142, 188, 0.26);
+  box-shadow:
+    0 24px 90px rgba(0, 0, 0, 0.52),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.movie-watch-page .player-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.32), transparent 35%, rgba(0, 0, 0, 0.24));
+}
+
+.movie-watch-page .player-overlay-controls,
+.movie-watch-page .player-hud {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: opacity 260ms ease, transform 260ms ease;
+  will-change: opacity, transform;
+}
+
+.movie-watch-page .player-frame.is-paused .player-overlay-controls {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.movie-watch-page .player-frame.is-paused .player {
+  filter: saturate(0.92) contrast(0.92);
+}
+
+.movie-watch-page .player-seek {
+  height: 14px;
+  border-radius: 99px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.16) 0 8px,
+      rgba(0, 0, 0, 0.08) 8px 12px
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(194, 212, 240, 0.28),
+    0 0 18px rgba(248, 68, 122, 0.14);
+}
+
+.movie-watch-page .player-seek::-webkit-slider-runnable-track {
+  height: 14px;
+  border-radius: 99px;
+  background:
+    linear-gradient(90deg, rgba(248, 68, 122, 0.75), rgba(58, 152, 255, 0.78))
+      0/var(--seek-fill, 0%) 100% no-repeat,
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.16) 0 8px,
+      rgba(0, 0, 0, 0.08) 8px 12px
+    );
+}
+
+.movie-watch-page .player-seek::-moz-range-track {
+  height: 14px;
+  border-radius: 99px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.16) 0 8px,
+      rgba(0, 0, 0, 0.08) 8px 12px
+    );
+}
+
+.movie-watch-page .player-seek::-webkit-slider-thumb,
+.movie-watch-page .player-seek::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: linear-gradient(180deg, #ff5f8b, #41b2ff);
+  box-shadow: 0 0 0 4px rgba(248, 68, 122, 0.2), 0 0 18px rgba(58, 152, 255, 0.36);
+}
+
+.watch-party-panel .watch-party-join-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+}
+
+.watch-party-panel .watch-party-join-form .btn-ghost {
+  min-width: 96px;
+}
+
+.watch-party-panel[data-state='idle'] .watch-party-live {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .movie-presentation {
+    grid-template-columns: 1fr;
+  }
+  .movie-presentation-media {
+    min-height: 300px;
+  }
+}
+
+@media (max-width: 640px) {
+  .movie-presentation-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .movie-presentation-actions > * {
+    width: 100%;
+  }
+  .movie-watch-page .player-seek,
+  .movie-watch-page .player-seek::-webkit-slider-runnable-track,
+  .movie-watch-page .player-seek::-moz-range-track {
+    height: 11px;
+  }
+  .movie-watch-page .player-seek::-webkit-slider-thumb,
+  .movie-watch-page .player-seek::-moz-range-thumb {
+    width: 13px;
+    height: 13px;
+  }
+}

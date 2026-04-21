@@ -9,7 +9,7 @@
 {% block content %}
 
 <!-- ══ HERO ══════════════════════════════════════════════ -->
-<section class="landing-hero glass reveal">
+<section class="landing-hero glass reveal" data-cinema-context-step="lobby">
 
   <!-- Columna izquierda: copy + búsqueda -->
   <div class="landing-copy">
@@ -112,7 +112,7 @@
 
 <!-- ══ SEGUIR VIENDO ══════════════════════════════════════ -->
 {% if user.is_authenticated and continue_watching %}
-<section class="section-head reveal" aria-labelledby="continue-heading">
+<section class="section-head reveal" aria-labelledby="continue-heading" data-cinema-context-step="billboard">
   <div>
     <h2 id="continue-heading">Seguir viendo</h2>
     <p class="muted">Retoma justo donde lo dejaste.</p>
@@ -137,7 +137,7 @@
 
 <!-- ══ NUEVAS ADICIONES ═══════════════════════════════════ -->
 {% if latest_additions %}
-<section class="section-head reveal" id="explorar" aria-labelledby="latest-heading">
+<section class="section-head reveal" id="explorar" aria-labelledby="latest-heading" data-cinema-context-step="billboard">
   <div>
     <h2 id="latest-heading">Lo nuevo en StreamVerse</h2>
     <p class="muted">Nuevas películas y series listas para tu maratón.</p>
@@ -163,7 +163,7 @@
 
 <!-- ══ RESULTADOS DE BÚSQUEDA ═════════════════════════════ -->
 {% if search_query %}
-<section class="section-head" aria-labelledby="results-heading">
+<section class="section-head" aria-labelledby="results-heading" data-cinema-context-step="archive">
   <h2 id="results-heading">
     Resultados de &ldquo;{{ search_query }}&rdquo;
     {% if results_count is not None %}

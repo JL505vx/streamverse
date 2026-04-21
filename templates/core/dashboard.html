@@ -9,7 +9,7 @@
 {% block content %}
 
 <!-- ══ COCKPIT PRINCIPAL ══════════════════════════════════ -->
-<section class="member-cockpit glass reveal" aria-label="Panel de usuario">
+<section class="member-cockpit glass reveal" aria-label="Panel de usuario" data-cinema-context-step="lobby">
 
   <!-- Columna principal: saludo + acciones -->
   <div class="member-cockpit-main">
@@ -107,7 +107,7 @@
 </section>
 
 <!-- ══ ESTADÍSTICAS RÁPIDAS ══════════════════════════════ -->
-<div class="member-stats-ribbon glass reveal" role="list" aria-label="Estadísticas">
+<div class="member-stats-ribbon glass reveal reveal-stagger" role="list" aria-label="Estadísticas">
   <article class="member-ribbon-card accent-card" role="listitem">
     <span>Catálogo</span>
     <strong>{{ total_movies }}</strong>
@@ -131,7 +131,7 @@
 </div>
 
 <!-- ══ SEGUIR VIENDO ══════════════════════════════════════ -->
-<section class="section-head member-section-head reveal" id="seguir-viendo" aria-labelledby="sw-heading">
+<section class="section-head member-section-head reveal" id="seguir-viendo" aria-labelledby="sw-heading" data-cinema-context-step="billboard">
   <div>
     <h2 id="sw-heading">Seguir viendo</h2>
     <p class="muted">Tus avances listos para continuar en un toque.</p>
@@ -161,7 +161,7 @@
 </div>
 
 <!-- ══ MI LISTA ═══════════════════════════════════════════ -->
-<section class="section-head member-section-head reveal" id="mi-lista" aria-labelledby="ml-heading">
+<section class="section-head member-section-head reveal" id="mi-lista" aria-labelledby="ml-heading" data-cinema-context-step="archive">
   <div>
     <h2 id="ml-heading">Mi lista</h2>
     <p class="muted">Tu fila personal para guardar lo que quieres ver después.</p>
@@ -190,7 +190,7 @@
 </div>
 
 <!-- ══ RECIÉN AGREGADAS ═══════════════════════════════════ -->
-<section class="section-head member-section-head reveal" id="recien-agregadas" aria-labelledby="ra-heading">
+<section class="section-head member-section-head reveal" id="recien-agregadas" aria-labelledby="ra-heading" data-cinema-context-step="billboard">
   <div>
     <h2 id="ra-heading">Recién agregadas</h2>
     <p class="muted">Lo último en el catálogo, listo para tu siguiente maratón.</p>

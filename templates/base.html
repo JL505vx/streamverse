@@ -5,6 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#020509">
+  <meta name="description" content="StreamVerse — Tu plataforma de streaming personal">
   <title>{% block title %}StreamVerse{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,9 +17,21 @@
   class="{% block body_class %}{% endblock %}"
   data-scene-theme="{% block scene_theme %}audience{% endblock %}"
   data-scene-mode="{% block scene_mode %}default{% endblock %}"
+  data-cinema-context="lobby"
 >
 
-  <!-- Background stage -->
+  <!-- ── Scroll progress bar ──────────────────────────── -->
+  <div id="sv-scroll-bar" aria-hidden="true"></div>
+
+  <!-- ── Cinema entry flash (first-load dark curtain) ── -->
+  <div class="sv-entry-overlay" aria-hidden="true"></div>
+
+  <!-- ── Ambient light blobs ─────────────────────────── -->
+  <div class="sv-ambient sv-ambient--a" aria-hidden="true"></div>
+  <div class="sv-ambient sv-ambient--b" aria-hidden="true"></div>
+  <div class="sv-ambient sv-ambient--c" aria-hidden="true"></div>
+
+  <!-- ── Three.js cinema stage ───────────────────────── -->
   <div class="cinema-stage" aria-hidden="true">
     <canvas id="cinema-scene"></canvas>
     <div class="cinema-glow cinema-glow-left"></div>
@@ -28,11 +41,18 @@
       <strong>{% block scene_title %}Snacks, lights and screen time{% endblock %}</strong>
     </div>
   </div>
-  <div class="bg-overlay"></div>
 
-  <!-- Topbar -->
+  <!-- ── Canvas 2D floating objects ──────────────────── -->
+  <canvas id="cinema-bg" aria-hidden="true"></canvas>
+
+  <!-- ── Scanline overlay ─────────────────────────────── -->
+  <div class="bg-overlay" aria-hidden="true"></div>
+
+  <!-- ── Topbar ───────────────────────────────────────── -->
   <header class="topbar glass" role="banner">
-    <a class="brand" href="{% if user.is_authenticated and user.is_staff %}{% url 'admin_panel' %}{% else %}{% url 'home' %}{% endif %}" aria-label="StreamVerse – Inicio">
+    <a class="brand"
+       href="{% if user.is_authenticated and user.is_staff %}{% url 'admin_panel' %}{% else %}{% url 'home' %}{% endif %}"
+       aria-label="StreamVerse — Inicio">
       StreamVerse
     </a>
 
@@ -60,7 +80,7 @@
     </nav>
   </header>
 
-  <!-- Main content -->
+  <!-- ── Main content ─────────────────────────────────── -->
   <main class="container" id="main-content">
     {% if messages %}
       <div class="flash-wrap" role="alert" aria-live="polite">
@@ -72,7 +92,7 @@
     {% block content %}{% endblock %}
   </main>
 
-  <!-- Mobile bottom dock (authenticated users only) -->
+  <!-- ── Mobile bottom dock ───────────────────────────── -->
   {% if user.is_authenticated and not user.is_staff %}
   <nav class="mobile-dock" aria-label="Navegación rápida">
 
@@ -111,11 +131,13 @@
   </nav>
   {% endif %}
 
-  <!-- Scripts -->
+  <!-- ── Scripts ──────────────────────────────────────── -->
   <script type="module" src="{% static 'js/cinema-scene.js' %}"></script>
+  <script src="{% static 'js/cinema-bg.js' %}"></script>
   <script src="{% static 'js/rail-carousel.js' %}"></script>
+  <script src="{% static 'js/sv-effects.js' %}"></script>
 
-  <!-- Scroll reveal -->
+  <!-- Scroll reveal (base) -->
   <script>
   (function(){
     if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -123,8 +145,8 @@
       entries.forEach(function(e){
         if(e.isIntersecting){ e.target.classList.add('is-visible'); io.unobserve(e.target); }
       });
-    }, { threshold: 0.08 });
-    document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+    }, { threshold: 0.07 });
+    document.querySelectorAll('.reveal,.reveal-up').forEach(function(el){ io.observe(el); });
   })();
   </script>
 

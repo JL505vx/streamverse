@@ -230,18 +230,9 @@ def home_view(request):
 @login_required
 def movie_detail_view(request, slug):
     movie = get_object_or_404(Movie.objects.select_related('genre'), slug=slug, is_published=True)
-    _track_watch_session(request, movie)
 
     progress = PlaybackProgress.objects.filter(user=request.user, movie=movie).first()
     resume_seconds = progress.progress_seconds if progress else 0
-    existing_party = (
-        WatchParty.objects.select_related('host', 'last_action_by')
-        .filter(movie=movie, is_active=True)
-        .filter(Q(host=request.user) | Q(members__user=request.user))
-        .distinct()
-        .first()
-    )
-    initial_party_code = ((request.GET.get('party') or '') or (existing_party.code if existing_party else '')).strip().upper()
 
     related_movies = (
         Movie.objects.filter(is_published=True, genre=movie.genre)
@@ -257,10 +248,39 @@ def movie_detail_view(request, slug):
         'is_favorite': is_favorite,
         'resume_seconds': resume_seconds,
         'resume_label': _format_clock(resume_seconds),
-        'watch_party_bootstrap': _serialize_watch_party_payload(existing_party, request.user, request) if existing_party else None,
-        'initial_party_code': initial_party_code,
     }
     return render(request, 'movies/movie_detail.html', context)
+
+
+@login_required
+def movie_watch_view(request, slug):
+    movie = get_object_or_404(Movie.objects.select_related('genre'), slug=slug, is_published=True)
+    _track_watch_session(request, movie)
+
+    progress = PlaybackProgress.objects.filter(user=request.user, movie=movie).first()
+    resume_seconds = progress.progress_seconds if progress else 0
+    # Do not auto-load or auto-join any room when opening playback.
+    # User must explicitly click "Crear sala" or "Unirse".
+    initial_party_code = (request.GET.get('party') or '').strip().upper()
+
+    related_movies = (
+        Movie.objects.filter(is_published=True, genre=movie.genre)
+        .exclude(pk=movie.pk)
+        .order_by('-created_at')[:6]
+    )
+
+    is_favorite = Favorite.objects.filter(user=request.user, movie=movie).exists()
+
+    context = {
+        'movie': movie,
+        'related_movies': related_movies,
+        'is_favorite': is_favorite,
+        'resume_seconds': resume_seconds,
+        'resume_label': _format_clock(resume_seconds),
+        'watch_party_bootstrap': None,
+        'initial_party_code': initial_party_code,
+    }
+    return render(request, 'movies/movie_watch.html', context)
 
 
 @login_required
