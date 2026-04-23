@@ -10,7 +10,14 @@ from django.utils import timezone
 from movies.models import Genre, Movie
 
 from .local_media import delete_local_video, get_local_video_max_bytes, save_uploaded_video_locally
-from .models import UserProfile
+from .models import (
+    ContentSuggestion,
+    MovieRating,
+    SuggestionMessage,
+    UserCustomList,
+    UserCustomListItem,
+    UserProfile,
+)
 from .supabase_storage import delete_public_file, upload_uploaded_file
 
 
@@ -106,25 +113,145 @@ class UserSettingsForm(forms.ModelForm):
         required=False,
         widget=forms.ClearableFileInput(attrs={'class': 'form-input', 'accept': 'image/*'}),
     )
+    parental_pin = forms.CharField(
+        required=False,
+        label='PIN parental',
+        widget=forms.PasswordInput(attrs={'class': 'form-input', 'placeholder': '4 digitos (opcional)'}),
+    )
+    parental_pin_confirm = forms.CharField(
+        required=False,
+        label='Confirmar PIN',
+        widget=forms.PasswordInput(attrs={'class': 'form-input', 'placeholder': 'Repite el PIN'}),
+    )
 
     class Meta:
         model = UserProfile
-        fields = ['display_name', 'bio', 'avatar_url', 'autoplay_enabled']
+        fields = [
+            'display_name',
+            'bio',
+            'avatar_url',
+            'autoplay_enabled',
+            'favorite_genres',
+            'parental_lock_enabled',
+            'parental_restricted_genres',
+        ]
         widgets = {
             'display_name': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Tu nombre visible'}),
             'bio': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Una frase sobre ti'}),
             'avatar_url': forms.URLInput(attrs={'class': 'form-input', 'placeholder': 'https://... (opcional)'}),
             'autoplay_enabled': forms.CheckboxInput(attrs={'class': 'form-check'}),
+            'favorite_genres': forms.SelectMultiple(attrs={'class': 'form-input', 'size': 6}),
+            'parental_lock_enabled': forms.CheckboxInput(attrs={'class': 'form-check'}),
+            'parental_restricted_genres': forms.SelectMultiple(attrs={'class': 'form-input', 'size': 6}),
         }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        pin = (cleaned_data.get('parental_pin') or '').strip()
+        pin_confirm = (cleaned_data.get('parental_pin_confirm') or '').strip()
+        lock_enabled = cleaned_data.get('parental_lock_enabled')
+
+        if lock_enabled and not (self.instance and self.instance.parental_pin_hash) and not pin:
+            raise forms.ValidationError('Activa un PIN parental para usar el bloqueo por genero.')
+
+        if pin:
+            if not pin.isdigit() or len(pin) != 4:
+                raise forms.ValidationError('El PIN debe tener exactamente 4 digitos numericos.')
+            if pin != pin_confirm:
+                raise forms.ValidationError('La confirmacion del PIN no coincide.')
+
+        return cleaned_data
 
     def save(self, commit=True):
         profile = super().save(commit=False)
         avatar_upload = self.cleaned_data.get('avatar_file')
+        pin = (self.cleaned_data.get('parental_pin') or '').strip()
+
         if avatar_upload:
             profile.avatar_url = upload_uploaded_file(avatar_upload, folder='avatars', replace_url=profile.avatar_url)
+        if pin:
+            profile.set_parental_pin(pin)
         if commit:
             profile.save()
+            self.save_m2m()
         return profile
+
+
+class ContentSuggestionForm(forms.ModelForm):
+    class Meta:
+        model = ContentSuggestion
+        fields = ['title', 'content_type', 'preferred_genre', 'details']
+        widgets = {
+            'title': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Ej: Spider-Man Beyond'}),
+            'content_type': forms.Select(attrs={'class': 'form-input'}),
+            'preferred_genre': forms.Select(attrs={'class': 'form-input'}),
+            'details': forms.Textarea(attrs={'class': 'form-input', 'rows': 3, 'placeholder': 'Por que te gustaria verla'}),
+        }
+
+
+class SuggestionMessageForm(forms.ModelForm):
+    class Meta:
+        model = SuggestionMessage
+        fields = ['text']
+        widgets = {
+            'text': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Mensaje corto sobre la sugerencia...'}),
+        }
+
+
+class UserCustomListForm(forms.ModelForm):
+    class Meta:
+        model = UserCustomList
+        fields = ['name']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Ej: Noche de accion'}),
+        }
+
+
+class UserCustomListAddForm(forms.Form):
+    custom_list = forms.ModelChoiceField(
+        queryset=UserCustomList.objects.none(),
+        widget=forms.Select(attrs={'class': 'form-input'}),
+        label='Lista',
+    )
+    movie = forms.ModelChoiceField(
+        queryset=Movie.objects.filter(is_published=True).order_by('title'),
+        widget=forms.Select(attrs={'class': 'form-input'}),
+        label='Pelicula/Serie',
+    )
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+        if user and user.is_authenticated:
+            self.fields['custom_list'].queryset = UserCustomList.objects.filter(user=user).order_by('name')
+
+    def save(self):
+        return UserCustomListItem.objects.get_or_create(
+            custom_list=self.cleaned_data['custom_list'],
+            movie=self.cleaned_data['movie'],
+        )
+
+
+class MovieRatingForm(forms.ModelForm):
+    score = forms.ChoiceField(
+        choices=[(1, '1 estrella'), (2, '2 estrellas'), (3, '3 estrellas'), (4, '4 estrellas'), (5, '5 estrellas')],
+        widget=forms.Select(attrs={'class': 'form-input'}),
+    )
+
+    class Meta:
+        model = MovieRating
+        fields = ['movie', 'score', 'note']
+        widgets = {
+            'movie': forms.Select(attrs={'class': 'form-input'}),
+            'note': forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Comentario opcional'}),
+        }
+
+
+class ParentalUnlockForm(forms.Form):
+    pin = forms.CharField(
+        label='PIN',
+        widget=forms.PasswordInput(attrs={'class': 'form-input', 'placeholder': 'PIN de 4 digitos'}),
+    )
 
 
 class UserAccountForm(forms.ModelForm):

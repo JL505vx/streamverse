@@ -257,4 +257,46 @@
   </div>
 </section>
 
+<section class="glass panel-box streams-box reveal" aria-labelledby="suggestions-heading">
+  <div class="admin-section-head compact-head">
+    <div>
+      <h3 id="suggestions-heading">Bandeja de sugerencias de usuarios</h3>
+      <p class="muted">Responde propuestas de peliculas/series y actualiza su estado.</p>
+    </div>
+  </div>
+  <div class="list-compact">
+    {% for suggestion in pending_suggestions %}
+      <div class="compact-item">
+        <span><strong>{{ suggestion.title }}</strong> · {{ suggestion.user.username }}</span>
+        <small>{{ suggestion.get_status_display }} · {{ suggestion.updated_at|date:"d/m H:i" }}</small>
+      </div>
+      <small class="muted" style="display:block;margin:0.25rem 0 0.6rem;">
+        Tipo: {{ suggestion.get_content_type_display }}{% if suggestion.preferred_genre %} · Genero: {{ suggestion.preferred_genre.name }}{% endif %}
+      </small>
+      {% if suggestion.details %}
+        <p class="muted" style="margin:0 0 0.6rem;">{{ suggestion.details }}</p>
+      {% endif %}
+      <form method="post" action="{% url 'admin_suggestion_status' suggestion.id %}" class="auth-form" style="margin-bottom:1rem;">
+        {% csrf_token %}
+        <p>
+          <label>Estado</label>
+          <select name="status" class="form-input">
+            <option value="pending" {% if suggestion.status == 'pending' %}selected{% endif %}>Pendiente</option>
+            <option value="reviewing" {% if suggestion.status == 'reviewing' %}selected{% endif %}>En revision</option>
+            <option value="approved" {% if suggestion.status == 'approved' %}selected{% endif %}>Aprobada</option>
+            <option value="rejected" {% if suggestion.status == 'rejected' %}selected{% endif %}>Rechazada</option>
+          </select>
+        </p>
+        <p>
+          <label>Respuesta al usuario</label>
+          <input type="text" name="admin_response" class="form-input" value="{{ suggestion.admin_response }}" placeholder="Mensaje corto para el usuario" />
+        </p>
+        <button type="submit" class="btn-primary">Actualizar sugerencia</button>
+      </form>
+    {% empty %}
+      <p class="muted">No hay sugerencias por revisar.</p>
+    {% endfor %}
+  </div>
+</section>
+
 {% endblock %}

@@ -63,6 +63,28 @@
         {% endfor %}
       </div>
     </section>
+
+    <section class="member-settings-panel">
+      <h3>Control parental</h3>
+      <p class="muted">Si activaste bloqueo por genero, desbloquea un genero con tu PIN (solo para esta sesion).</p>
+      <form method="post" action="{% url 'user_parental_unlock' %}" class="auth-form">
+        {% csrf_token %}
+        <p>
+          <label for="unlock-genre">Genero a desbloquear</label>
+          <select class="form-input" id="unlock-genre" name="genre_id">
+            <option value="">Selecciona genero</option>
+            {% for genre in profile.parental_restricted_genres.all %}
+              <option value="{{ genre.id }}">{{ genre.name }}</option>
+            {% endfor %}
+          </select>
+        </p>
+        <p>
+          <label for="unlock-pin">PIN</label>
+          <input class="form-input" id="unlock-pin" type="password" name="pin" placeholder="PIN de 4 digitos" />
+        </p>
+        <button class="btn-ghost" type="submit">Desbloquear genero</button>
+      </form>
+    </section>
   </aside>
 </div>
 {% endblock %}

@@ -1,13 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Archivos | {{ movie.title }}{% endblock %}
+{% block body_class %}admin-page admin-media-page{% endblock %}
 {% block scene_theme %}admin{% endblock %}
 {% block scene_kicker %}Media Room{% endblock %}
 {% block scene_title %}Corrige portadas y videos sin romper la ficha del contenido{% endblock %}
 {% block content %}
 <section class="dash-header glass admin-head">
-  <div>
+  <div class="admin-media-head-copy">
     <h1>Archivos de: {{ movie.title }}</h1>
-    <p class="muted">Aqui corriges la portada en Supabase y el video por URL o almacenamiento local sin mover el resto de la ficha.</p>
+    <p class="muted">Corrige portada y video desde un solo lugar. Flujo recomendado: primero portada, luego video, y al final guardar.</p>
+    <div class="admin-media-steps" aria-label="Flujo recomendado">
+      <span>Paso 1: portada</span>
+      <span>Paso 2: video</span>
+      <span>Paso 3: guardar cambios</span>
+    </div>
   </div>
   <div class="toolbar-links">
     <a class="btn-ghost" href="{% url 'admin_movie_edit' movie.pk %}">Editar ficha</a>
@@ -15,8 +21,8 @@
   </div>
 </section>
 
-<section class="glass hint-box">
-  <p class="muted">Si subes una portada nueva, se reemplaza en Supabase. Si subes un video nuevo, se guarda localmente y se actualiza la URL. Si marcas quitar, se borra la referencia y puedes volver a subir otro.</p>
+<section class="glass hint-box admin-media-status">
+  <p class="muted"><strong>Regla rápida:</strong> portada nueva reemplaza Supabase, video nuevo reemplaza URL/ruta local. Si marcas quitar, se limpia la referencia actual.</p>
   <p class="muted">Estado actual: <strong>{{ movie.video_storage_label }}</strong></p>
   {% if movie.video_is_local %}<p class="muted">Ruta esperada en este servidor: <strong>{{ movie.local_video_path }}</strong></p>{% endif %}
   {% if movie.video_is_local and not movie.video_file_exists %}<div class="form-errors">La base de datos apunta a un archivo local que no existe en este servidor.</div>{% endif %}
@@ -31,7 +37,8 @@
     {% endif %}
 
     <div class="admin-form-grid">
-      <section class="form-card">
+      <section class="form-card media-card media-card-cover">
+        <p class="eyebrow">Paso 1</p>
         <h3>Portada</h3>
         {% if movie.cover_url %}
           <p class="field-help">Actual por URL: {{ movie.cover_url }}</p>
@@ -52,7 +59,8 @@
         {{ form.remove_cover_file.errors }}
       </section>
 
-      <section class="form-card">
+      <section class="form-card media-card media-card-video">
+        <p class="eyebrow">Paso 2</p>
         <h3>Video</h3>
         {% if movie.video_url %}
           <p class="field-help">Actual por URL: {{ movie.video_url }}</p>
@@ -80,7 +88,7 @@
       <div class="form-errors">Revise los campos marcados. Si algo falla, aqui ya queda visible por campo.</div>
     {% endif %}
 
-    <div class="hero-actions">
+    <div class="hero-actions admin-media-actions">
       <button type="submit" class="btn-primary">Guardar archivos</button>
       <a class="btn-ghost" href="{% url 'admin_movie_edit' movie.pk %}">Editar todo</a>
       <a class="btn-mini" href="{% url 'admin_movies' %}">Cancelar</a>

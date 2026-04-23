@@ -11,6 +11,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from core.models import UserProfile
+
 from .models import Favorite, Movie, PlaybackProgress, WatchParty, WatchPartyMember, WatchSession
 from .watch_party import (
     get_watch_party_messages,
@@ -170,18 +172,48 @@ def _resolve_watch_party(movie, code):
     )
 
 
+def _restricted_genre_ids_for_user(user):
+    if not user.is_authenticated:
+        return set()
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    if not profile.parental_lock_enabled:
+        return set()
+    return set(profile.parental_restricted_genres.values_list('id', flat=True))
+
+
+def _session_unlocked_genres(request):
+    unlocked = request.session.get('parental_unlocked_genres', [])
+    return set(int(value) for value in unlocked if str(value).isdigit())
+
+
+def _apply_parental_filter(request, queryset):
+    restricted = _restricted_genre_ids_for_user(request.user)
+    if not restricted:
+        return queryset
+    unlocked = _session_unlocked_genres(request)
+    blocked = restricted - unlocked
+    if not blocked:
+        return queryset
+    return queryset.exclude(genre_id__in=blocked)
+
+
 def home_view(request):
-    published_movies = Movie.objects.filter(is_published=True).select_related('genre')
+    published_movies = _apply_parental_filter(
+        request,
+        Movie.objects.filter(is_published=True).select_related('genre'),
+    )
     query = (request.GET.get('q') or '').strip()
     selected_type = (request.GET.get('type') or '').strip()
 
-    latest_movies = published_movies.order_by('-created_at')
-    movies = latest_movies
+    catalog_base = published_movies
     ranked_movies = published_movies.annotate(total_views=Coalesce(Sum('watch_sessions__views_count'), 0))
 
     if selected_type in ('movie', 'series'):
-        movies = movies.filter(content_type=selected_type)
+        catalog_base = catalog_base.filter(content_type=selected_type)
         ranked_movies = ranked_movies.filter(content_type=selected_type)
+
+    latest_movies = catalog_base.order_by('-created_at')
+    movies = latest_movies
 
     if query:
         filters = Q(title__icontains=query) | Q(genre__name__icontains=query) | Q(synopsis__icontains=query)
@@ -192,18 +224,37 @@ def home_view(request):
 
     top_trending = ranked_movies.filter(total_views__gt=0).order_by('-total_views', '-created_at')[:10]
     latest_movie = latest_movies.first()
-    latest_additions = list(latest_movies[:8])
+    latest_additions = list(latest_movies[:4])
 
     genre_rows = []
     genre_sources = (
-        movies.values('genre_id', 'genre__name')
+        catalog_base.values('genre_id', 'genre__name')
         .annotate(total=Count('id'))
-        .order_by('-total', 'genre__name')[:5]
+        .order_by('-total', 'genre__name')[:8]
     )
     for row in genre_sources:
-        items = list(movies.filter(genre_id=row['genre_id']).order_by('-created_at')[:10])
+        items = list(catalog_base.filter(genre_id=row['genre_id']).order_by('-created_at')[:10])
         if items:
             genre_rows.append({'name': row['genre__name'], 'items': items})
+
+    search_results = list(movies[:18]) if query else []
+    featured_search_result = None
+    search_related_by_genre = []
+    search_results_secondary = []
+    if query and search_results:
+        featured_search_result = next((item for item in search_results if (item.title or '').lower() == query.lower()), None)
+        if not featured_search_result:
+            featured_search_result = next((item for item in search_results if (item.title or '').lower().startswith(query.lower())), None)
+        if not featured_search_result:
+            featured_search_result = search_results[0]
+
+        search_results_secondary = [item for item in search_results if item.pk != featured_search_result.pk]
+        if featured_search_result.genre_id:
+            search_related_by_genre = list(
+                catalog_base.filter(genre_id=featured_search_result.genre_id)
+                .exclude(pk=featured_search_result.pk)
+                .order_by('-created_at')[:10]
+            )
 
     continue_watching = []
     if request.user.is_authenticated:
@@ -217,7 +268,11 @@ def home_view(request):
         'latest_movie_card': _build_latest_movie_card(latest_movie),
         'latest_additions': latest_additions,
         'genre_rows': genre_rows,
-        'search_results': movies[:18] if query else [],
+        'search_results': search_results,
+        'search_results_secondary': search_results_secondary,
+        'featured_search_result': featured_search_result,
+        'search_related_by_genre': search_related_by_genre,
+        'search_mode': bool(query),
         'top_trending': top_trending,
         'continue_watching': continue_watching,
         'search_query': query,
@@ -229,7 +284,11 @@ def home_view(request):
 
 @login_required
 def movie_detail_view(request, slug):
-    movie = get_object_or_404(Movie.objects.select_related('genre'), slug=slug, is_published=True)
+    movie = get_object_or_404(
+        _apply_parental_filter(request, Movie.objects.select_related('genre')),
+        slug=slug,
+        is_published=True,
+    )
 
     progress = PlaybackProgress.objects.filter(user=request.user, movie=movie).first()
     resume_seconds = progress.progress_seconds if progress else 0
@@ -254,7 +313,11 @@ def movie_detail_view(request, slug):
 
 @login_required
 def movie_watch_view(request, slug):
-    movie = get_object_or_404(Movie.objects.select_related('genre'), slug=slug, is_published=True)
+    movie = get_object_or_404(
+        _apply_parental_filter(request, Movie.objects.select_related('genre')),
+        slug=slug,
+        is_published=True,
+    )
     _track_watch_session(request, movie)
 
     progress = PlaybackProgress.objects.filter(user=request.user, movie=movie).first()
@@ -288,7 +351,7 @@ def toggle_favorite_view(request, slug):
     if request.method != 'POST':
         return redirect('movie_detail', slug=slug)
 
-    movie = get_object_or_404(Movie, slug=slug, is_published=True)
+    movie = get_object_or_404(_apply_parental_filter(request, Movie.objects.all()), slug=slug, is_published=True)
     favorite = Favorite.objects.filter(user=request.user, movie=movie)
 
     if favorite.exists():
@@ -309,7 +372,7 @@ def update_progress_view(request, slug):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'invalid_method'}, status=405)
 
-    movie = get_object_or_404(Movie, slug=slug, is_published=True)
+    movie = get_object_or_404(_apply_parental_filter(request, Movie.objects.all()), slug=slug, is_published=True)
 
     try:
         payload = json.loads(request.body.decode('utf-8'))
@@ -339,7 +402,7 @@ def update_progress_view(request, slug):
 @login_required
 @require_POST
 def create_watch_party_view(request, slug):
-    movie = get_object_or_404(Movie, slug=slug, is_published=True)
+    movie = get_object_or_404(_apply_parental_filter(request, Movie.objects.all()), slug=slug, is_published=True)
     party = WatchParty.objects.filter(movie=movie, host=request.user, is_active=True).first()
 
     if not party:
@@ -353,7 +416,7 @@ def create_watch_party_view(request, slug):
 @login_required
 @require_POST
 def join_watch_party_view(request, slug):
-    movie = get_object_or_404(Movie, slug=slug, is_published=True)
+    movie = get_object_or_404(_apply_parental_filter(request, Movie.objects.all()), slug=slug, is_published=True)
     payload = _load_json_payload(request)
     if payload is None:
         return JsonResponse({'ok': False, 'error': 'invalid_json'}, status=400)
@@ -369,7 +432,7 @@ def join_watch_party_view(request, slug):
 
 @login_required
 def watch_party_state_view(request, slug, code):
-    movie = get_object_or_404(Movie, slug=slug, is_published=True)
+    movie = get_object_or_404(_apply_parental_filter(request, Movie.objects.all()), slug=slug, is_published=True)
     party = _resolve_watch_party(movie, code)
     if not user_is_in_watch_party(party, request.user):
         return JsonResponse({'ok': False, 'error': 'not_joined'}, status=403)
@@ -381,7 +444,7 @@ def watch_party_state_view(request, slug, code):
 @login_required
 @require_POST
 def watch_party_sync_view(request, slug, code):
-    movie = get_object_or_404(Movie, slug=slug, is_published=True)
+    movie = get_object_or_404(_apply_parental_filter(request, Movie.objects.all()), slug=slug, is_published=True)
     party = _resolve_watch_party(movie, code)
     if not user_can_control_watch_party(party, request.user):
         return JsonResponse({'ok': False, 'error': 'host_only'}, status=403)
@@ -414,7 +477,7 @@ def watch_party_sync_view(request, slug, code):
 @login_required
 @require_POST
 def leave_watch_party_view(request, slug, code):
-    movie = get_object_or_404(Movie, slug=slug, is_published=True)
+    movie = get_object_or_404(_apply_parental_filter(request, Movie.objects.all()), slug=slug, is_published=True)
     party = _resolve_watch_party(movie, code)
     if not user_is_in_watch_party(party, request.user):
         return JsonResponse({'ok': False, 'error': 'not_joined'}, status=403)

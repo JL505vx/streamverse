@@ -218,4 +218,104 @@
   <button type="button" class="rail-arrow rail-arrow-right" data-rail-next aria-label="Siguiente">&#8250;</button>
 </div>
 
+<section class="panel-grid admin-overview-grid reveal">
+  <article class="glass panel-box">
+    <h3>Notificaciones{% if unread_notifications %} ({{ unread_notifications }} nuevas){% endif %}</h3>
+    <form method="post" action="{% url 'user_notifications_read' %}" style="margin:0 0 0.8rem;">
+      {% csrf_token %}
+      <button class="btn-ghost" type="submit">Marcar todas como leidas</button>
+    </form>
+    <div class="list-compact">
+      {% for note in notifications %}
+        <div class="compact-item">
+          <span>{{ note.title }}</span>
+          <small>{{ note.created_at|date:"d/m H:i" }}{% if not note.is_read %} · Nueva{% endif %}</small>
+        </div>
+      {% empty %}
+        <p class="muted">No tienes notificaciones por ahora.</p>
+      {% endfor %}
+    </div>
+  </article>
+
+  <article class="glass panel-box">
+    <h3>Sugerir pelicula o serie</h3>
+    <form method="post" action="{% url 'user_suggestion_create' %}" class="auth-form">
+      {% csrf_token %}
+      {{ suggestion_form.as_p }}
+      <button class="btn-primary" type="submit">Enviar sugerencia</button>
+    </form>
+    <div class="list-compact" style="margin-top:1rem;">
+      {% for suggestion in open_suggestions %}
+        <div class="compact-item">
+          <span>{{ suggestion.title }} · {{ suggestion.get_status_display }}</span>
+          <small>{{ suggestion.updated_at|date:"d/m H:i" }}</small>
+        </div>
+        <form method="post" action="{% url 'user_suggestion_reply' suggestion.id %}" class="auth-form" style="margin:0.35rem 0 0.9rem;">
+          {% csrf_token %}
+          {{ suggestion_message_form.as_p }}
+          <button class="btn-ghost" type="submit">Responder hilo</button>
+        </form>
+      {% empty %}
+        <p class="muted">Aun no envias sugerencias.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+
+<section class="panel-grid admin-overview-grid reveal">
+  <article class="glass panel-box">
+    <h3>Listas personalizadas</h3>
+    <form method="post" action="{% url 'user_custom_list_create' %}" class="auth-form">
+      {% csrf_token %}
+      {{ custom_list_form.as_p }}
+      <button class="btn-ghost" type="submit">Crear lista</button>
+    </form>
+    <form method="post" action="{% url 'user_custom_list_add' %}" class="auth-form" style="margin-top:1rem;">
+      {% csrf_token %}
+      {{ custom_list_add_form.as_p }}
+      <button class="btn-primary" type="submit">Agregar titulo</button>
+    </form>
+    {% for custom_list in custom_lists %}
+      <div class="compact-item" style="margin-top:0.9rem;">
+        <span>{{ custom_list.name }}</span>
+        <small>{{ custom_list.items.count }} titulo(s)</small>
+      </div>
+      <div class="list-compact">
+        {% for item in custom_list.items.all|slice:":4" %}
+          <div class="compact-item">
+            <span>{{ item.movie.title }}</span>
+            <form method="post" action="{% url 'user_custom_list_remove_item' item.id %}">
+              {% csrf_token %}
+              <button type="submit" class="btn-ghost">Quitar</button>
+            </form>
+          </div>
+        {% empty %}
+          <p class="muted">Lista vacia.</p>
+        {% endfor %}
+      </div>
+    {% empty %}
+      <p class="muted">Crea tu primera lista personalizada.</p>
+    {% endfor %}
+  </article>
+
+  <article class="glass panel-box">
+    <h3>Califica lo que ves</h3>
+    <form method="post" action="{% url 'user_rate_movie' %}" class="auth-form">
+      {% csrf_token %}
+      {{ rating_form.as_p }}
+      <button class="btn-primary" type="submit">Guardar calificacion</button>
+    </form>
+    <div class="list-compact" style="margin-top:1rem;">
+      {% for rate in recent_ratings %}
+        <div class="compact-item">
+          <span>{{ rate.movie.title }} · {{ rate.score }}/5</span>
+          <small>{{ rate.updated_at|date:"d/m H:i" }}{% if rate.note %} · {{ rate.note }}{% endif %}</small>
+        </div>
+      {% empty %}
+        <p class="muted">Todavia no has calificado contenido.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+
 {% endblock %}

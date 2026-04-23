@@ -2056,6 +2056,106 @@ h3 { font-size: clamp(1.1rem, 2vw, 1.4rem); }
 .admin-page #cinema-scene { opacity: 0.55; }
 .admin-page .topbar { gap: 0.9rem; }
 
+/* Admin media page (upload UX) */
+.admin-media-page .dash-header,
+.admin-media-page .hint-box,
+.admin-media-page .admin-form-shell {
+  max-width: 1160px;
+  margin-inline: auto;
+}
+
+.admin-media-page .dash-header {
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.admin-media-page .admin-media-head-copy {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.admin-media-page .admin-media-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.admin-media-page .admin-media-steps span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--r-full);
+  border: 1px solid rgba(14, 165, 233, 0.26);
+  background: rgba(14, 165, 233, 0.1);
+  color: #8ed7ff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.24rem 0.62rem;
+}
+
+.admin-media-page .admin-media-status {
+  border: 1px solid rgba(14, 165, 233, 0.22);
+  background: linear-gradient(160deg, rgba(5, 12, 30, 0.94), rgba(3, 8, 22, 0.94));
+}
+
+.admin-media-page .admin-form-shell {
+  max-width: 1160px;
+  padding: clamp(1rem, 2.2vw, 1.4rem);
+}
+
+.admin-media-page .auth-form {
+  gap: 1rem;
+}
+
+.admin-media-page .admin-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 1rem;
+}
+
+.admin-media-page .media-card {
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(133, 161, 203, 0.2);
+  background: linear-gradient(150deg, rgba(6, 14, 34, 0.92), rgba(4, 10, 24, 0.95));
+  padding: 1rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.admin-media-page .media-card .eyebrow {
+  margin: 0;
+  color: #73c7ff;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.admin-media-page .media-card h3 {
+  margin-bottom: 0.25rem;
+}
+
+.admin-media-page .media-card input[type="file"] {
+  width: 100%;
+  border: 1px dashed rgba(14, 165, 233, 0.34);
+  border-radius: var(--r-md);
+  padding: 0.7rem 0.75rem;
+  background: rgba(5, 12, 30, 0.72);
+}
+
+.admin-media-page .media-card .inline-check {
+  margin-top: 0.35rem;
+}
+
+.admin-media-page .admin-media-actions {
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+
+@media (max-width: 980px) {
+  .admin-media-page .admin-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── 29. PLAYER ──────────────────────────────────────────── */
 .player-layout {
   display: grid;

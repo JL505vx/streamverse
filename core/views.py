@@ -1,4 +1,5 @@
 from datetime import timedelta
+import json
 import logging
 import mimetypes
 import os
@@ -26,14 +27,27 @@ from .forms import (
     AdminUserCreateForm,
     AdminUserUpdateForm,
     BulkCatalogImportForm,
+    ContentSuggestionForm,
     GenreAdminForm,
+    MovieRatingForm,
     MovieAdminForm,
     MovieMediaForm,
+    SuggestionMessageForm,
     UserAccountForm,
+    UserCustomListAddForm,
+    UserCustomListForm,
     UserSettingsForm,
     UserSignupForm,
 )
-from .models import UserProfile
+from .models import (
+    ContentSuggestion,
+    MovieRating,
+    SuggestionMessage,
+    UserCustomList,
+    UserCustomListItem,
+    UserNotification,
+    UserProfile,
+)
 from .session_scopes import resolve_auth_scope
 from .local_media import append_chunk_to_upload, delete_local_video, finalize_chunk_upload
 from .supabase_storage import delete_public_file
@@ -339,6 +353,115 @@ def get_user_profile(user):
     return profile
 
 
+def create_user_notification(user, title, body='', *, kind=UserNotification.Kind.INFO, link_url=''):
+    if not user:
+        return None
+    return UserNotification.objects.create(
+        user=user,
+        kind=kind,
+        title=(title or '')[:120],
+        body=(body or '')[:400],
+        link_url=(link_url or '')[:240],
+    )
+
+
+def _get_parental_unlock_map(request):
+    unlocked = request.session.get('parental_unlocked_genres', [])
+    return set(int(value) for value in unlocked if str(value).isdigit())
+
+
+def pwa_manifest_view(request):
+    payload = {
+        'name': 'StreamVerse',
+        'short_name': 'StreamVerse',
+        'id': '/',
+        'start_url': '/',
+        'scope': '/',
+        'display': 'standalone',
+        'orientation': 'portrait',
+        'background_color': '#020509',
+        'theme_color': '#020509',
+        'description': 'StreamVerse local y free streaming.',
+        'categories': ['entertainment', 'video'],
+        'icons': [
+            {
+                'src': '/static/pwa/icon-192.png?v=2',
+                'sizes': '192x192',
+                'type': 'image/png',
+                'purpose': 'any maskable',
+            },
+            {
+                'src': '/static/pwa/icon-512.png?v=2',
+                'sizes': '512x512',
+                'type': 'image/png',
+                'purpose': 'any maskable',
+            },
+        ],
+    }
+    return HttpResponse(json.dumps(payload), content_type='application/manifest+json')
+
+
+def pwa_service_worker_view(request):
+    js = """
+const CACHE_NAME = 'streamverse-pwa-v2';
+const OFFLINE_URL = '/offline/';
+const ASSETS = [
+  '/',
+  OFFLINE_URL,
+  '/static/css/main.css',
+  '/static/js/cinema-bg.js',
+  '/static/js/cinema-scene.js',
+  '/static/js/rail-carousel.js',
+  '/static/js/sv-effects.js',
+  '/static/pwa/icon-192.png?v=2',
+  '/static/pwa/icon-512.png?v=2'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+        return res;
+      }).catch(() => caches.match(req).then((hit) => hit || caches.match(OFFLINE_URL)))
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(req).then((hit) => hit || fetch(req).then((res) => {
+      const copy = res.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+      return res;
+    }).catch(() => hit))
+  );
+});
+"""
+    return HttpResponse(js.strip(), content_type='application/javascript')
+
+
+def offline_view(request):
+    return render(request, 'errors/offline.html')
+
+
 def signup_view(request):
     if request.user.is_authenticated:
         return redirect('user_dashboard')
@@ -357,7 +480,12 @@ def signup_view(request):
 @login_required
 def user_dashboard_view(request):
     profile = get_user_profile(request.user)
+    unlocked_genres = _get_parental_unlock_map(request)
+    restricted_genre_ids = set(profile.parental_restricted_genres.values_list('id', flat=True)) if profile.parental_lock_enabled else set()
+
     recent_movies = list(Movie.objects.filter(is_published=True).select_related('genre').order_by('-created_at')[:8])
+    if restricted_genre_ids:
+        recent_movies = [movie for movie in recent_movies if (movie.genre_id not in restricted_genre_ids or movie.genre_id in unlocked_genres)]
 
     favorites = list(Favorite.objects.filter(user=request.user).select_related('movie', 'movie__genre')[:10])
     continue_watching = list(
@@ -365,6 +493,11 @@ def user_dashboard_view(request):
         .select_related('movie', 'movie__genre')
         .order_by('-last_watched')[:10]
     )
+    if restricted_genre_ids:
+        continue_watching = [
+            item for item in continue_watching
+            if (item.movie.genre_id not in restricted_genre_ids or item.movie.genre_id in unlocked_genres)
+        ]
 
     watch_qs = WatchSession.objects.filter(user=request.user).select_related('movie')
     recent_sessions = list(watch_qs[:6])
@@ -380,6 +513,30 @@ def user_dashboard_view(request):
         (item.progress_seconds for item in continue_watching if hero_recommendation and item.movie_id == hero_recommendation.id),
         0,
     )
+    notifications = list(UserNotification.objects.filter(user=request.user).order_by('-created_at')[:8])
+    unread_notifications = sum(1 for item in notifications if not item.is_read)
+    open_suggestions = list(
+        ContentSuggestion.objects.filter(user=request.user)
+        .select_related('preferred_genre')
+        .prefetch_related('messages')
+        .order_by('-updated_at')[:6]
+    )
+    custom_lists = list(
+        UserCustomList.objects.filter(user=request.user)
+        .prefetch_related('items__movie')
+        .order_by('name')[:8]
+    )
+    recent_ratings = list(
+        MovieRating.objects.filter(user=request.user)
+        .select_related('movie')
+        .order_by('-updated_at')[:6]
+    )
+
+    suggestion_form = ContentSuggestionForm()
+    suggestion_message_form = SuggestionMessageForm()
+    custom_list_form = UserCustomListForm()
+    custom_list_add_form = UserCustomListAddForm(user=request.user)
+    rating_form = MovieRatingForm()
 
     context = {
         'profile': profile,
@@ -409,6 +566,17 @@ def user_dashboard_view(request):
         'favorites_count': favorites_count,
         'continue_count': len(continue_watching),
         'new_releases_count': len(recent_movies),
+        'notifications': notifications,
+        'unread_notifications': unread_notifications,
+        'open_suggestions': open_suggestions,
+        'custom_lists': custom_lists,
+        'recent_ratings': recent_ratings,
+        'suggestion_form': suggestion_form,
+        'suggestion_message_form': suggestion_message_form,
+        'custom_list_form': custom_list_form,
+        'custom_list_add_form': custom_list_add_form,
+        'rating_form': rating_form,
+        'parental_lock_enabled': profile.parental_lock_enabled,
     }
     return render(request, 'core/dashboard.html', context)
 
@@ -443,6 +611,190 @@ def user_settings_view(request):
             'recent_sessions': recent_sessions,
         },
     )
+
+
+@login_required
+@require_POST
+def user_suggestion_create_view(request):
+    form = ContentSuggestionForm(request.POST)
+    if form.is_valid():
+        suggestion = form.save(commit=False)
+        suggestion.user = request.user
+        suggestion.save()
+        SuggestionMessage.objects.create(
+            suggestion=suggestion,
+            sender=request.user,
+            text='Solicitud creada por el usuario.',
+        )
+        for admin in User.objects.filter(is_staff=True, is_active=True):
+            create_user_notification(
+                admin,
+                'Nueva sugerencia de catalogo',
+                f'{request.user.username} solicito: {suggestion.title}',
+                kind=UserNotification.Kind.SUGGESTION,
+                link_url=reverse('admin_panel'),
+            )
+        messages.success(request, 'Sugerencia enviada al admin.')
+    else:
+        messages.error(request, 'No se pudo enviar la sugerencia. Revisa los campos.')
+    return redirect('user_dashboard')
+
+
+@login_required
+@require_POST
+def user_suggestion_reply_view(request, suggestion_id):
+    suggestion = get_object_or_404(ContentSuggestion, pk=suggestion_id)
+    if not (suggestion.user_id == request.user.id or request.user.is_staff):
+        messages.error(request, 'No tienes permiso para responder esta sugerencia.')
+        return redirect('user_dashboard')
+
+    form = SuggestionMessageForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, 'El mensaje no puede estar vacio.')
+        return redirect('user_dashboard')
+
+    msg = form.save(commit=False)
+    msg.suggestion = suggestion
+    msg.sender = request.user
+    msg.save()
+
+    suggestion.status = ContentSuggestion.Status.REVIEWING
+    suggestion.save(update_fields=['status', 'updated_at'])
+
+    target_user = suggestion.user if request.user.is_staff else User.objects.filter(is_staff=True, is_active=True).first()
+    if target_user:
+        create_user_notification(
+            target_user,
+            f'Nuevo mensaje en sugerencia: {suggestion.title}',
+            msg.text[:180],
+            kind=UserNotification.Kind.SUGGESTION,
+            link_url=reverse('user_dashboard') if target_user == suggestion.user else reverse('admin_panel'),
+        )
+
+    messages.success(request, 'Mensaje enviado.')
+    return redirect('admin_panel' if request.user.is_staff else 'user_dashboard')
+
+
+@login_required
+@require_POST
+def user_custom_list_create_view(request):
+    form = UserCustomListForm(request.POST)
+    if form.is_valid():
+        custom_list = form.save(commit=False)
+        custom_list.user = request.user
+        custom_list.save()
+        messages.success(request, 'Lista creada correctamente.')
+    else:
+        messages.error(request, 'No se pudo crear la lista.')
+    return redirect('user_dashboard')
+
+
+@login_required
+@require_POST
+def user_custom_list_add_view(request):
+    form = UserCustomListAddForm(request.POST, user=request.user)
+    if form.is_valid():
+        _, created = form.save()
+        messages.success(
+            request,
+            'Titulo agregado a la lista.' if created else 'Ese titulo ya estaba en la lista.',
+        )
+    else:
+        messages.error(request, 'No se pudo agregar el titulo.')
+    return redirect('user_dashboard')
+
+
+@login_required
+@require_POST
+def user_custom_list_remove_item_view(request, item_id):
+    item = get_object_or_404(UserCustomListItem.objects.select_related('custom_list'), pk=item_id)
+    if item.custom_list.user_id != request.user.id:
+        messages.error(request, 'No tienes permiso para modificar esta lista.')
+        return redirect('user_dashboard')
+    item.delete()
+    messages.success(request, 'Titulo removido de la lista.')
+    return redirect('user_dashboard')
+
+
+@login_required
+@require_POST
+def user_rate_movie_view(request):
+    form = MovieRatingForm(request.POST)
+    if form.is_valid():
+        movie = form.cleaned_data['movie']
+        score = int(form.cleaned_data['score'])
+        note = form.cleaned_data.get('note', '')
+        MovieRating.objects.update_or_create(
+            user=request.user,
+            movie=movie,
+            defaults={'score': score, 'note': note},
+        )
+        messages.success(request, f'Guardaste tu calificacion para {movie.title}.')
+    else:
+        messages.error(request, 'No se pudo guardar la calificacion.')
+    return redirect('user_dashboard')
+
+
+@login_required
+@require_POST
+def user_notifications_read_view(request):
+    UserNotification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+    return redirect('user_dashboard')
+
+
+@login_required
+@require_POST
+def user_parental_unlock_view(request):
+    profile = get_user_profile(request.user)
+    pin = (request.POST.get('pin') or '').strip()
+    genre_id_raw = (request.POST.get('genre_id') or '').strip()
+    genre_id = int(genre_id_raw) if genre_id_raw.isdigit() else None
+
+    if not profile.parental_lock_enabled:
+        messages.info(request, 'El control parental no esta activo en tu perfil.')
+        return redirect('user_settings')
+
+    if not profile.check_parental_pin(pin):
+        messages.error(request, 'PIN incorrecto.')
+        return redirect('user_settings')
+
+    unlocked = _get_parental_unlock_map(request)
+    if genre_id:
+        unlocked.add(genre_id)
+    request.session['parental_unlocked_genres'] = sorted(unlocked)
+    request.session.modified = True
+    messages.success(request, 'Genero desbloqueado para esta sesion.')
+    return redirect('user_settings')
+
+
+@admin_required
+@require_POST
+def admin_suggestion_status_view(request, suggestion_id):
+    suggestion = get_object_or_404(ContentSuggestion, pk=suggestion_id)
+    status = (request.POST.get('status') or '').strip()
+    response_text = (request.POST.get('admin_response') or '').strip()
+    valid_statuses = {value for value, _ in ContentSuggestion.Status.choices}
+    if status not in valid_statuses:
+        messages.error(request, 'Estado de sugerencia invalido.')
+        return redirect('admin_panel')
+
+    suggestion.status = status
+    suggestion.admin_response = response_text
+    suggestion.resolved_by = request.user
+    suggestion.save(update_fields=['status', 'admin_response', 'resolved_by', 'updated_at'])
+
+    if response_text:
+        SuggestionMessage.objects.create(suggestion=suggestion, sender=request.user, text=response_text[:600])
+
+    create_user_notification(
+        suggestion.user,
+        f'Actualizacion de sugerencia: {suggestion.title}',
+        f'Estado: {suggestion.get_status_display()}',
+        kind=UserNotification.Kind.SUGGESTION,
+        link_url=reverse('user_dashboard'),
+    )
+    messages.success(request, 'Sugerencia actualizada.')
+    return redirect('admin_panel')
 
 
 @admin_required
@@ -505,6 +857,11 @@ def admin_panel_view(request):
         return round((value / catalog_total) * 100)
 
     catalog_needs = [movie for movie in catalog_movies if _movie_has_missing_video(movie) or not movie.cover_url][:6]
+    pending_suggestions = list(
+        ContentSuggestion.objects.select_related('user', 'preferred_genre', 'resolved_by')
+        .prefetch_related('messages__sender')
+        .order_by('-updated_at')[:12]
+    )
 
     context = {
         'movie_count': Movie.objects.filter(content_type=Movie.ContentType.MOVIE).count(),
@@ -532,6 +889,7 @@ def admin_panel_view(request):
         'user_activity': user_activity,
         'user_histories': user_histories[:6],
         'catalog_needs': catalog_needs,
+        'pending_suggestions': pending_suggestions,
     }
     return render(request, 'core/admin_panel.html', context)
 

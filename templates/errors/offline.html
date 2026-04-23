@@ -1,0 +1,50 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#020509">
+  <title>StreamVerse · Sin conexion</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top, #0f2a4f, #020509 58%);
+      color: #e9f1ff;
+      font-family: "Plus Jakarta Sans", Arial, sans-serif;
+      padding: 24px;
+    }
+    .card {
+      width: min(560px, 100%);
+      border: 1px solid rgba(100, 180, 255, 0.35);
+      border-radius: 18px;
+      padding: 22px;
+      background: rgba(6, 16, 36, 0.75);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+    }
+    h1 { margin: 0 0 10px; font-size: 1.6rem; }
+    p { margin: 0.45rem 0; color: #b6c9ee; }
+    a {
+      display: inline-block;
+      margin-top: 12px;
+      color: #fff;
+      text-decoration: none;
+      background: linear-gradient(135deg, #ff4f8d, #2fb7ff);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <article class="card">
+    <h1>StreamVerse sin conexion</h1>
+    <p>No hay red por ahora. Cuando vuelva internet, recarga para continuar.</p>
+    <p>Puedes intentar de nuevo y seguir viendo tu catalogo.</p>
+    <a href="/">Reintentar</a>
+  </article>
+</body>
+</html>
