@@ -2,6 +2,7 @@ import logging
 import os
 from pathlib import Path
 import re
+import subprocess
 from uuid import uuid4
 
 from django.conf import settings
@@ -110,6 +111,45 @@ def append_chunk_to_upload(upload_id: str, filename: str, uploaded_chunk, chunk_
     return temp_path
 
 
+def _ensure_browser_compatible_audio(video_path: Path) -> None:
+    processed_path = video_path.with_name(f'{video_path.stem}_processed.mp4')
+    command = [
+        'ffmpeg',
+        '-y',
+        '-i',
+        str(video_path),
+        '-c:v',
+        'copy',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '128k',
+        str(processed_path),
+    ]
+
+    logger.info(
+        'Iniciando conversion ffmpeg para compatibilidad navegador input=%s output=%s',
+        video_path,
+        processed_path,
+    )
+
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+        processed_path.replace(video_path)
+    except Exception as exc:
+        if processed_path.exists():
+            processed_path.unlink()
+        logger.error(
+            'No se pudo convertir audio a AAC con ffmpeg; se conserva el archivo original path=%s error=%s',
+            video_path,
+            exc,
+            exc_info=True,
+        )
+        return
+
+    logger.info('Conversion ffmpeg completada y archivo reemplazado path=%s', video_path)
+
+
 def finalize_chunk_upload(upload_id: str, filename: str) -> str:
     temp_path = get_chunk_upload_temp_path(upload_id, filename)
     if not temp_path.exists():
@@ -117,6 +157,7 @@ def finalize_chunk_upload(upload_id: str, filename: str) -> str:
 
     destination, public_url = _build_local_video_destination(filename)
     temp_path.replace(destination)
+    _ensure_browser_compatible_audio(destination)
     logger.info(
         'Video ensamblado desde chunks upload_id=%s origen=%s destino=%s',
         upload_id,
