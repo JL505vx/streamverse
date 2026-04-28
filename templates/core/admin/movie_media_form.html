@@ -24,6 +24,12 @@
 <section class="glass hint-box admin-media-status">
   <p class="muted"><strong>Regla rápida:</strong> portada nueva reemplaza Supabase, video nuevo reemplaza URL/ruta local. Si marcas quitar, se limpia la referencia actual.</p>
   <p class="muted">Estado actual: <strong>{{ movie.video_storage_label }}</strong></p>
+  <p class="muted">
+    Procesamiento:
+    <strong data-video-status-badge data-video-id="{{ movie.pk }}">
+      {{ movie.get_status_display }}{% if movie.processing_step %} - {{ movie.processing_step }}{% endif %}
+    </strong>
+  </p>
   {% if movie.video_is_local %}<p class="muted">Ruta esperada en este servidor: <strong>{{ movie.local_video_path }}</strong></p>{% endif %}
   {% if movie.video_is_local and not movie.video_file_exists %}<div class="form-errors">La base de datos apunta a un archivo local que no existe en este servidor.</div>{% endif %}
 </section>
@@ -98,4 +104,30 @@
 {% endblock %}
 {% block extra_scripts %}
   {% include "core/admin/_chunked_video_upload.html" %}
+  <script>
+    (() => {
+      const badge = document.querySelector('[data-video-status-badge][data-video-id]');
+      if (!badge) return;
+
+      const activeStatuses = new Set(['subiendo', 'procesando']);
+      const refresh = async () => {
+        try {
+          const response = await fetch(`/api/video/${badge.dataset.videoId}/status`, {
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          });
+          if (!response.ok) return;
+          const data = await response.json();
+          badge.textContent = data.step ? `${data.status_label} - ${data.step}` : data.status_label;
+          if (activeStatuses.has(data.status)) {
+            window.setTimeout(refresh, 3000);
+          }
+        } catch (error) {
+          console.error('No se pudo consultar estado de video', error);
+        }
+      };
+
+      refresh();
+    })();
+  </script>
 {% endblock %}

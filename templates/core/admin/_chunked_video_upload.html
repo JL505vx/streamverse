@@ -430,6 +430,9 @@
           if (result.video_url) {
             uploadedVideoUrl = result.video_url;
           }
+          if (result.message && result.complete) {
+            setStatus(result.message, 'success');
+          }
         }
 
         if (!uploadedVideoUrl) {

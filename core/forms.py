@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from movies.models import Genre, Movie
 
-from .local_media import delete_local_video, get_local_video_max_bytes, save_uploaded_video_locally
+from .local_media import delete_local_video, get_local_video_max_bytes, save_uploaded_video_locally, start_video_processing_background
 from .models import (
     ContentSuggestion,
     MovieRating,
@@ -76,6 +76,25 @@ def _clear_video_upload_metadata(movie):
     movie.video_upload_size_bytes = 0
     movie.video_upload_duration_ms = 0
     movie.video_uploaded_at = None
+
+
+def _video_needs_local_processing(movie) -> bool:
+    return bool(movie.video_url and movie.video_url.startswith(settings.MEDIA_URL))
+
+
+def _mark_video_received(movie):
+    movie.status = Movie.ProcessingStatus.PROCESSING
+    movie.processing_step = 'recibido'
+
+
+def _mark_video_ready(movie):
+    movie.status = Movie.ProcessingStatus.READY
+    movie.processing_step = 'finalizado'
+
+
+def _mark_video_empty(movie):
+    movie.status = Movie.ProcessingStatus.UPLOADING
+    movie.processing_step = ''
 
 
 class StyledAuthenticationForm(AuthenticationForm):
@@ -343,6 +362,7 @@ class MovieAdminForm(forms.ModelForm):
         chunk_upload_duration_ms = self.cleaned_data.get('chunk_upload_duration_ms')
         chunk_upload_filename = self.cleaned_data.get('chunk_upload_filename')
         chunk_upload_size_bytes = self.cleaned_data.get('chunk_upload_size_bytes')
+        should_process_video = False
 
         if cover_upload:
             movie.cover_url = upload_uploaded_file(cover_upload, folder='covers', replace_url=movie.cover_url)
@@ -350,6 +370,9 @@ class MovieAdminForm(forms.ModelForm):
             delete_local_video(self.original_video_url)
             delete_public_file(self.original_video_url)
             movie.video_url = save_uploaded_video_locally(video_upload)
+            should_process_video = _video_needs_local_processing(movie)
+            if should_process_video:
+                _mark_video_received(movie)
             _apply_video_upload_metadata(
                 movie,
                 filename=getattr(video_upload, 'name', ''),
@@ -359,6 +382,9 @@ class MovieAdminForm(forms.ModelForm):
             if movie.video_url != self.original_video_url:
                 delete_local_video(self.original_video_url)
                 delete_public_file(self.original_video_url)
+            should_process_video = _video_needs_local_processing(movie)
+            if should_process_video:
+                _mark_video_received(movie)
             _apply_video_upload_metadata(
                 movie,
                 filename=chunk_upload_filename,
@@ -369,9 +395,15 @@ class MovieAdminForm(forms.ModelForm):
             delete_local_video(self.original_video_url)
             delete_public_file(self.original_video_url)
             _clear_video_upload_metadata(movie)
+            if movie.video_url:
+                _mark_video_ready(movie)
+            else:
+                _mark_video_empty(movie)
 
         if commit:
             movie.save()
+            if should_process_video:
+                start_video_processing_background(movie.video_url, movie_id=movie.pk)
         return movie
 
 
@@ -436,6 +468,7 @@ class MovieMediaForm(forms.ModelForm):
         chunk_upload_duration_ms = self.cleaned_data.get('chunk_upload_duration_ms')
         chunk_upload_filename = self.cleaned_data.get('chunk_upload_filename')
         chunk_upload_size_bytes = self.cleaned_data.get('chunk_upload_size_bytes')
+        should_process_video = False
 
         if self.cleaned_data.get('remove_cover_file'):
             delete_public_file(movie.cover_url)
@@ -446,6 +479,7 @@ class MovieMediaForm(forms.ModelForm):
             delete_public_file(movie.video_url)
             movie.video_url = ''
             _clear_video_upload_metadata(movie)
+            _mark_video_empty(movie)
 
         if cover_upload:
             movie.cover_url = upload_uploaded_file(cover_upload, folder='covers', replace_url=movie.cover_url)
@@ -454,6 +488,9 @@ class MovieMediaForm(forms.ModelForm):
             delete_local_video(self.original_video_url)
             delete_public_file(self.original_video_url)
             movie.video_url = save_uploaded_video_locally(video_upload)
+            should_process_video = _video_needs_local_processing(movie)
+            if should_process_video:
+                _mark_video_received(movie)
             _apply_video_upload_metadata(
                 movie,
                 filename=getattr(video_upload, 'name', ''),
@@ -463,6 +500,9 @@ class MovieMediaForm(forms.ModelForm):
             if movie.video_url != self.original_video_url:
                 delete_local_video(self.original_video_url)
                 delete_public_file(self.original_video_url)
+            should_process_video = _video_needs_local_processing(movie)
+            if should_process_video:
+                _mark_video_received(movie)
             _apply_video_upload_metadata(
                 movie,
                 filename=chunk_upload_filename,
@@ -473,9 +513,15 @@ class MovieMediaForm(forms.ModelForm):
             delete_local_video(self.original_video_url)
             delete_public_file(self.original_video_url)
             _clear_video_upload_metadata(movie)
+            if movie.video_url:
+                _mark_video_ready(movie)
+            else:
+                _mark_video_empty(movie)
 
         if commit:
             movie.save()
+            if should_process_video:
+                start_video_processing_background(movie.video_url, movie_id=movie.pk)
         return movie
 
 

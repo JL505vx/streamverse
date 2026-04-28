@@ -3,10 +3,13 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import threading
 from uuid import uuid4
 
 from django.conf import settings
+from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
+from django.db import close_old_connections
 from django.utils.text import slugify
 
 
@@ -46,7 +49,8 @@ def get_local_videos_dir() -> Path:
 
 def _build_local_video_destination(filename: str):
     safe_name = _safe_filename(filename, 'video')
-    final_name = f'{uuid4().hex[:12]}-{safe_name}'
+    safe_stem = Path(safe_name).stem or 'video'
+    final_name = f'{uuid4().hex[:12]}-{safe_stem}.mp4'
     destination = get_local_videos_dir() / final_name
     public_url = f"{settings.MEDIA_URL.rstrip('/')}/videos/{final_name}"
     return destination, public_url
@@ -140,7 +144,22 @@ def _count_audio_streams(video_path: Path):
     return len([line for line in result.stdout.splitlines() if line.strip()])
 
 
-def _ensure_browser_compatible_audio(video_path: Path) -> None:
+def _update_movie_processing_state(movie_id, *, status=None, step=None):
+    if not movie_id:
+        return
+
+    Movie = apps.get_model('movies', 'Movie')
+    updates = {}
+    if status is not None:
+        updates['status'] = status
+    if step is not None:
+        updates['processing_step'] = step
+    if updates:
+        Movie.objects.filter(pk=movie_id).update(**updates)
+
+
+def _ensure_browser_compatible_audio(video_path: Path, movie_id=None) -> bool:
+    _update_movie_processing_state(movie_id, step='analizando audio')
     input_audio_count = _count_audio_streams(video_path)
     processed_path = video_path.with_name(f'{video_path.stem}_processed.mp4')
     command = [
@@ -172,6 +191,7 @@ def _ensure_browser_compatible_audio(video_path: Path) -> None:
         video_path,
         processed_path,
     )
+    _update_movie_processing_state(movie_id, step='convirtiendo')
 
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True)
@@ -185,7 +205,7 @@ def _ensure_browser_compatible_audio(video_path: Path) -> None:
                 (result.stderr or '').strip(),
             )
             processed_path.unlink(missing_ok=True)
-            return
+            return False
         processed_path.replace(video_path)
     except subprocess.CalledProcessError as exc:
         if processed_path.exists():
@@ -196,7 +216,7 @@ def _ensure_browser_compatible_audio(video_path: Path) -> None:
             (exc.stderr or '').strip(),
             exc_info=True,
         )
-        return
+        return False
     except Exception as exc:
         if processed_path.exists():
             processed_path.unlink()
@@ -206,7 +226,7 @@ def _ensure_browser_compatible_audio(video_path: Path) -> None:
             exc,
             exc_info=True,
         )
-        return
+        return False
 
     logger.info(
         'Conversion ffmpeg completada y archivo reemplazado path=%s audio_entrada=%s audio_salida=%s stdout=%s stderr=%s',
@@ -216,6 +236,46 @@ def _ensure_browser_compatible_audio(video_path: Path) -> None:
         (result.stdout or '').strip(),
         (result.stderr or '').strip(),
     )
+    return True
+
+
+def procesar_video_background(public_url: str, movie_id=None) -> None:
+    close_old_connections()
+    try:
+        _update_movie_processing_state(movie_id, status='procesando', step='recibido')
+        video_path = resolve_local_media_path(public_url)
+        if not video_path or not video_path.exists():
+            logger.error(
+                'No se pudo procesar video en background; archivo local no existe movie_id=%s public_url=%s path=%s',
+                movie_id,
+                public_url,
+                video_path,
+            )
+            _update_movie_processing_state(movie_id, status='error')
+            return
+
+        processed_ok = _ensure_browser_compatible_audio(video_path, movie_id=movie_id)
+        if not processed_ok:
+            _update_movie_processing_state(movie_id, status='error')
+            return
+
+        _update_movie_processing_state(movie_id, status='listo', step='finalizado')
+        logger.info('Procesamiento de video finalizado movie_id=%s public_url=%s', movie_id, public_url)
+    except Exception:
+        logger.exception('Error inesperado procesando video en background movie_id=%s public_url=%s', movie_id, public_url)
+        _update_movie_processing_state(movie_id, status='error')
+    finally:
+        close_old_connections()
+
+
+def start_video_processing_background(public_url: str, movie_id=None) -> None:
+    thread = threading.Thread(
+        target=procesar_video_background,
+        args=(public_url, movie_id),
+        daemon=True,
+        name=f'video-processing-{movie_id or "pending"}',
+    )
+    thread.start()
 
 
 def finalize_chunk_upload(upload_id: str, filename: str) -> str:
@@ -225,7 +285,6 @@ def finalize_chunk_upload(upload_id: str, filename: str) -> str:
 
     destination, public_url = _build_local_video_destination(filename)
     temp_path.replace(destination)
-    _ensure_browser_compatible_audio(destination)
     logger.info(
         'Video ensamblado desde chunks upload_id=%s origen=%s destino=%s',
         upload_id,

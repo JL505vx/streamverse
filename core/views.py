@@ -250,6 +250,30 @@ def upload_chunk_view(request):
             'chunk': chunk_index,
             'complete': is_last_chunk,
             'video_url': video_url,
+            'status': 'procesando' if is_last_chunk else 'subiendo',
+            'message': (
+                'Video subido, procesando en background'
+                if is_last_chunk
+                else 'Chunk recibido, subida en progreso'
+            ),
+        }
+    )
+
+
+@admin_required
+def video_processing_status_view(request, pk):
+    movie = get_object_or_404(Movie, pk=pk)
+    return JsonResponse(
+        {
+            'id': movie.pk,
+            'status': movie.status,
+            'status_label': movie.get_status_display(),
+            'step': movie.processing_step or '',
+            'message': (
+                f'{movie.get_status_display()} - {movie.processing_step}'
+                if movie.processing_step
+                else movie.get_status_display()
+            ),
         }
     )
 

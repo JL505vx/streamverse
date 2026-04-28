@@ -1845,6 +1845,12 @@ h3 { font-size: clamp(1.1rem, 2vw, 1.4rem); }
   border: 1px solid rgba(245, 158, 11, 0.25);
 }
 
+.catalog-status.is-processing {
+  background: rgba(14, 165, 233, 0.13);
+  color: #7dd3fc;
+  border: 1px solid rgba(14, 165, 233, 0.28);
+}
+
 .catalog-meta-grid {
   margin: 0;
   display: grid;

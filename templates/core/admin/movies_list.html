@@ -51,6 +51,7 @@
         <th>Ano</th>
         <th>Origen</th>
         <th>Estado</th>
+        <th>Procesamiento</th>
         <th>Acciones</th>
       </tr>
     </thead>
@@ -63,6 +64,11 @@
         <td>{{ movie.release_year }}</td>
         <td>{{ movie.video_storage_label }}</td>
         <td>{% if movie.is_published %}Publicado{% else %}Borrador{% endif %}</td>
+        <td>
+          <span class="catalog-status {% if movie.status == 'listo' %}is-live{% elif movie.status == 'error' %}is-draft{% else %}is-processing{% endif %}" data-video-status-badge data-video-id="{{ movie.pk }}">
+            {{ movie.get_status_display }}{% if movie.processing_step %} - {{ movie.processing_step }}{% endif %}
+          </span>
+        </td>
         <td class="actions">
           <a class="btn-primary" href="{% url 'admin_movie_media' movie.pk %}">Archivos</a>
           <a class="btn-ghost" href="{% url 'admin_movie_edit' movie.pk %}">Editar</a>
@@ -70,7 +76,7 @@
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="7" class="muted">No hay contenidos registrados con ese filtro.</td></tr>
+      <tr><td colspan="8" class="muted">No hay contenidos registrados con ese filtro.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -98,6 +104,10 @@
         <dt>Portada</dt>
         <dd>{% if movie.cover_url %}Lista{% else %}Falta portada{% endif %}</dd>
       </div>
+      <div>
+        <dt>Procesamiento</dt>
+        <dd data-video-status-badge data-video-id="{{ movie.pk }}">{{ movie.get_status_display }}{% if movie.processing_step %} - {{ movie.processing_step }}{% endif %}</dd>
+      </div>
     </dl>
 
     <div class="catalog-action-stack">
@@ -112,4 +122,35 @@
   </article>
   {% endfor %}
 </div>
+<script>
+  (() => {
+    const badges = Array.from(document.querySelectorAll('[data-video-status-badge][data-video-id]'));
+    if (!badges.length) return;
+
+    const activeStatuses = new Set(['subiendo', 'procesando']);
+    const refresh = async () => {
+      let hasActive = false;
+      await Promise.all(badges.map(async (badge) => {
+        try {
+          const response = await fetch(`/api/video/${badge.dataset.videoId}/status`, {
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          });
+          if (!response.ok) return;
+          const data = await response.json();
+          badge.textContent = data.step ? `${data.status_label} - ${data.step}` : data.status_label;
+          badge.dataset.status = data.status;
+          if (activeStatuses.has(data.status)) hasActive = true;
+        } catch (error) {
+          console.error('No se pudo consultar estado de video', error);
+        }
+      }));
+      if (hasActive) {
+        window.setTimeout(refresh, 4000);
+      }
+    };
+
+    refresh();
+  })();
+</script>
 {% endblock %}

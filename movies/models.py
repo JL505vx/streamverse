@@ -29,6 +29,12 @@ class Movie(models.Model):
         MOVIE = 'movie', 'Pelicula'
         SERIES = 'series', 'Serie'
 
+    class ProcessingStatus(models.TextChoices):
+        UPLOADING = 'subiendo', 'Subiendo'
+        PROCESSING = 'procesando', 'Procesando'
+        READY = 'listo', 'Listo'
+        ERROR = 'error', 'Error'
+
     title = models.CharField(max_length=180)
     slug = models.SlugField(max_length=200, unique=True, blank=True)
     content_type = models.CharField(max_length=10, choices=ContentType.choices, default=ContentType.MOVIE)
@@ -41,6 +47,8 @@ class Movie(models.Model):
     video_upload_size_bytes = models.PositiveBigIntegerField(default=0)
     video_upload_duration_ms = models.PositiveIntegerField(default=0)
     video_uploaded_at = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=ProcessingStatus.choices, default=ProcessingStatus.UPLOADING)
+    processing_step = models.CharField(max_length=50, blank=True, null=True)
     is_published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
