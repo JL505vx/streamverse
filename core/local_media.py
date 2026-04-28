@@ -111,19 +111,59 @@ def append_chunk_to_upload(upload_id: str, filename: str, uploaded_chunk, chunk_
     return temp_path
 
 
+def _count_audio_streams(video_path: Path):
+    command = [
+        'ffprobe',
+        '-v',
+        'error',
+        '-select_streams',
+        'a',
+        '-show_entries',
+        'stream=index',
+        '-of',
+        'csv=p=0',
+        str(video_path),
+    ]
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+    except FileNotFoundError:
+        logger.info('ffprobe no esta disponible; se omite validacion de pistas de audio path=%s', video_path)
+        return None
+    except subprocess.CalledProcessError as exc:
+        logger.error(
+            'ffprobe no pudo inspeccionar pistas de audio path=%s stderr=%s',
+            video_path,
+            (exc.stderr or '').strip(),
+        )
+        return None
+
+    return len([line for line in result.stdout.splitlines() if line.strip()])
+
+
 def _ensure_browser_compatible_audio(video_path: Path) -> None:
+    input_audio_count = _count_audio_streams(video_path)
     processed_path = video_path.with_name(f'{video_path.stem}_processed.mp4')
     command = [
         'ffmpeg',
         '-y',
+        '-nostdin',
+        '-hide_banner',
+        '-loglevel',
+        'error',
         '-i',
         str(video_path),
+        '-map',
+        '0:v:0',
+        '-map',
+        '0:a?',
         '-c:v',
         'copy',
         '-c:a',
         'aac',
         '-b:a',
-        '128k',
+        '192k',
+        '-movflags',
+        '+faststart',
         str(processed_path),
     ]
 
@@ -134,8 +174,29 @@ def _ensure_browser_compatible_audio(video_path: Path) -> None:
     )
 
     try:
-        subprocess.run(command, check=True, capture_output=True, text=True)
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        output_audio_count = _count_audio_streams(processed_path)
+        if not output_audio_count:
+            logger.error(
+                'ffmpeg genero un archivo sin audio; se conserva el original path=%s audio_entrada=%s stdout=%s stderr=%s',
+                video_path,
+                input_audio_count,
+                (result.stdout or '').strip(),
+                (result.stderr or '').strip(),
+            )
+            processed_path.unlink(missing_ok=True)
+            return
         processed_path.replace(video_path)
+    except subprocess.CalledProcessError as exc:
+        if processed_path.exists():
+            processed_path.unlink()
+        logger.error(
+            'ffmpeg fallo; se conserva el archivo original path=%s stderr=%s',
+            video_path,
+            (exc.stderr or '').strip(),
+            exc_info=True,
+        )
+        return
     except Exception as exc:
         if processed_path.exists():
             processed_path.unlink()
@@ -147,7 +208,14 @@ def _ensure_browser_compatible_audio(video_path: Path) -> None:
         )
         return
 
-    logger.info('Conversion ffmpeg completada y archivo reemplazado path=%s', video_path)
+    logger.info(
+        'Conversion ffmpeg completada y archivo reemplazado path=%s audio_entrada=%s audio_salida=%s stdout=%s stderr=%s',
+        video_path,
+        input_audio_count,
+        output_audio_count,
+        (result.stdout or '').strip(),
+        (result.stderr or '').strip(),
+    )
 
 
 def finalize_chunk_upload(upload_id: str, filename: str) -> str:
