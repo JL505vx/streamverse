@@ -1851,6 +1851,205 @@ h3 { font-size: clamp(1.1rem, 2vw, 1.4rem); }
   border: 1px solid rgba(14, 165, 233, 0.28);
 }
 
+.catalog-status.is-error {
+  background: var(--danger-bg);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.28);
+}
+
+.catalog-processing {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 11rem;
+  margin-top: 0.45rem;
+}
+
+.catalog-progress-track,
+.processing-progress-track {
+  width: 100%;
+  height: 10px;
+  border-radius: var(--r-full);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.catalog-progress-track span,
+.processing-progress-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: var(--r-full);
+  background: linear-gradient(90deg, var(--primary), var(--cyan));
+  box-shadow: 0 0 18px rgba(14, 165, 233, 0.28);
+  transition: width 0.25s var(--ease-out);
+}
+
+.catalog-processing small {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.processing-detail {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1rem;
+  padding: 1.2rem;
+}
+
+.processing-detail-head,
+.processing-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.processing-detail-head strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.processing-progress-large {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.processing-progress-track {
+  height: 18px;
+}
+
+.processing-progress-meta strong {
+  font-size: 1.45rem;
+}
+
+.processing-progress-meta span,
+.processing-metrics dd,
+.processing-step small {
+  color: var(--text-muted);
+}
+
+.processing-metrics {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.processing-metrics div {
+  padding: 0.8rem;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.processing-metrics dt {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  margin-bottom: 0.18rem;
+}
+
+.processing-metrics dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.processing-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.processing-step {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.8rem;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.processing-step-icon {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: var(--r-full);
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.processing-step-icon::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: var(--r-full);
+  background: rgba(148, 163, 184, 0.8);
+}
+
+.processing-step.is-complete {
+  border-color: rgba(16, 185, 129, 0.26);
+}
+
+.processing-step.is-complete .processing-step-icon {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.34);
+}
+
+.processing-step.is-complete .processing-step-icon::before {
+  content: "✓";
+  width: auto;
+  height: auto;
+  color: #6ee7b7;
+  background: transparent;
+  font-weight: 900;
+}
+
+.processing-step.is-active {
+  border-color: rgba(14, 165, 233, 0.34);
+  background: rgba(14, 165, 233, 0.08);
+}
+
+.processing-step.is-active .processing-step-icon {
+  background: rgba(14, 165, 233, 0.16);
+  border-color: rgba(14, 165, 233, 0.4);
+}
+
+.processing-step.is-active .processing-step-icon::before {
+  background: #7dd3fc;
+  box-shadow: 0 0 14px rgba(14, 165, 233, 0.55);
+}
+
+.processing-step.is-error {
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.processing-step.is-error .processing-step-icon {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.36);
+}
+
+.processing-step.is-error .processing-step-icon::before {
+  background: #fca5a5;
+}
+
+.processing-error {
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  border-radius: var(--r-md);
+  padding: 0.9rem;
+  background: var(--danger-bg);
+}
+
+.processing-error p {
+  margin: 0.35rem 0 0;
+  color: #fecaca;
+}
+
 .catalog-meta-grid {
   margin: 0;
   display: grid;

@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Procesamiento | {{ movie.title }}{% endblock %}
+{% block body_class %}admin-page{% endblock %}
+{% block scene_theme %}admin{% endblock %}
+{% block scene_kicker %}Video Pipeline{% endblock %}
+{% block scene_title %}Estado de procesamiento{% endblock %}
+{% block content %}
+<section class="dash-header glass admin-head">
+  <div>
+    <h1>{{ movie.title }}</h1>
+    <p class="muted">{{ movie.get_content_type_display }} | {{ movie.genre.name }} | {{ movie.release_year }}</p>
+  </div>
+  <div class="toolbar-links">
+    <a class="btn-ghost" href="{% url 'admin_movies' %}">Catalogo</a>
+    <a class="btn-primary" href="{% url 'admin_movie_media' movie.pk %}">Archivos</a>
+  </div>
+</section>
+
+<section
+  class="glass processing-detail"
+  data-processing-detail
+  data-video-id="{{ movie.pk }}"
+  data-status-url="{% url 'video_processing_status' movie.pk %}"
+>
+  <div class="processing-detail-head">
+    <span
+      class="catalog-status {% if movie.status == 'listo' %}is-live{% elif movie.status == 'error' %}is-error{% elif movie.status == 'procesando' or movie.status == 'subiendo' %}is-processing{% else %}is-draft{% endif %}"
+      data-processing-badge
+    >
+      {{ movie.get_status_display }}
+    </span>
+    <strong data-processing-stage>{{ movie.processing_stage|default:"pendiente" }}</strong>
+  </div>
+
+  <div class="processing-progress-large">
+    <div class="processing-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ movie.processing_progress|default:0 }}" data-processing-track>
+      <span style="width:{{ movie.processing_progress|default:0 }}%" data-processing-fill></span>
+    </div>
+    <div class="processing-progress-meta">
+      <strong data-processing-percent>{{ movie.processing_progress|default:0 }}%</strong>
+      <span data-processing-message>{{ movie.processing_step|default:"Pendiente" }}</span>
+    </div>
+  </div>
+
+  <dl class="processing-metrics">
+    <div>
+      <dt>Inicio</dt>
+      <dd data-processing-started>{% if movie.processing_started_at %}{{ movie.processing_started_at|date:"d/m/Y H:i:s" }}{% else %}--{% endif %}</dd>
+    </div>
+    <div>
+      <dt>Fin</dt>
+      <dd data-processing-finished>{% if movie.processing_finished_at %}{{ movie.processing_finished_at|date:"d/m/Y H:i:s" }}{% else %}--{% endif %}</dd>
+    </div>
+    <div>
+      <dt>Tiempo</dt>
+      <dd data-processing-elapsed>{{ elapsed_label }}</dd>
+    </div>
+  </dl>
+
+  <ol class="processing-timeline" data-processing-timeline>
+    {% for item in timeline %}
+      <li class="processing-step is-{{ item.state }}" data-stage="{{ item.key }}" data-stage-percent="{{ item.percent }}">
+        <span class="processing-step-icon" aria-hidden="true"></span>
+        <div>
+          <strong>{{ item.label }}</strong>
+          <small>{{ item.percent }}%</small>
+        </div>
+      </li>
+    {% endfor %}
+  </ol>
+
+  <div class="processing-error" data-processing-error {% if not movie.error_message %}hidden{% endif %}>
+    <strong>Error</strong>
+    <p data-processing-error-text>{{ movie.error_message }}</p>
+  </div>
+</section>
+
+<script>
+  (() => {
+    const root = document.querySelector('[data-processing-detail]');
+    if (!root) return;
+
+    const statusUrl = root.dataset.statusUrl;
+    const activeStatuses = new Set(['subiendo', 'procesando']);
+    const fill = root.querySelector('[data-processing-fill]');
+    const track = root.querySelector('[data-processing-track]');
+    const percentEl = root.querySelector('[data-processing-percent]');
+    const badge = root.querySelector('[data-processing-badge]');
+    const stageEl = root.querySelector('[data-processing-stage]');
+    const messageEl = root.querySelector('[data-processing-message]');
+    const startedEl = root.querySelector('[data-processing-started]');
+    const finishedEl = root.querySelector('[data-processing-finished]');
+    const elapsedEl = root.querySelector('[data-processing-elapsed]');
+    const errorBox = root.querySelector('[data-processing-error]');
+    const errorText = root.querySelector('[data-processing-error-text]');
+    const steps = Array.from(root.querySelectorAll('[data-stage]'));
+
+    const formatDate = (value) => {
+      if (!value) return '--';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '--';
+      return new Intl.DateTimeFormat('es-MX', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }).format(date);
+    };
+
+    const formatElapsed = (startedAt, finishedAt) => {
+      if (!startedAt) return 'Sin iniciar';
+      const start = new Date(startedAt);
+      const end = finishedAt ? new Date(finishedAt) : new Date();
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Sin iniciar';
+      const total = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      const seconds = total % 60;
+      if (hours) return `${hours} h ${minutes} min ${seconds} s`;
+      if (minutes) return `${minutes} min ${seconds} s`;
+      return `${seconds} s`;
+    };
+
+    const setBadgeClass = (status) => {
+      if (!badge) return;
+      badge.classList.remove('is-live', 'is-draft', 'is-processing', 'is-error');
+      if (status === 'listo') badge.classList.add('is-live');
+      else if (status === 'error') badge.classList.add('is-error');
+      else if (activeStatuses.has(status)) badge.classList.add('is-processing');
+      else badge.classList.add('is-draft');
+    };
+
+    const updateTimeline = (data) => {
+      const progress = Number(data.progress || 0);
+      steps.forEach((step) => {
+        const stage = step.dataset.stage;
+        const percent = Number(step.dataset.stagePercent || 0);
+        step.classList.remove('is-complete', 'is-active', 'is-pending', 'is-error');
+        if (data.status === 'error' && stage === data.stage) {
+          step.classList.add('is-error');
+        } else if (data.stage === stage && progress < 100) {
+          step.classList.add('is-active');
+        } else if (progress >= percent) {
+          step.classList.add('is-complete');
+        } else {
+          step.classList.add('is-pending');
+        }
+      });
+    };
+
+    const render = (data) => {
+      const progress = Math.max(0, Math.min(100, Number(data.progress || 0)));
+      if (fill) fill.style.width = `${progress}%`;
+      if (track) track.setAttribute('aria-valuenow', String(progress));
+      if (percentEl) percentEl.textContent = `${progress}%`;
+      if (badge) badge.textContent = data.status_label || data.status || 'Estado';
+      if (stageEl) stageEl.textContent = data.stage || 'pendiente';
+      if (messageEl) messageEl.textContent = data.step || data.message || 'Pendiente';
+      if (startedEl) startedEl.textContent = formatDate(data.started_at);
+      if (finishedEl) finishedEl.textContent = formatDate(data.finished_at);
+      if (elapsedEl) elapsedEl.textContent = formatElapsed(data.started_at, data.finished_at);
+      setBadgeClass(data.status);
+      updateTimeline(data);
+
+      if (errorBox && errorText) {
+        const hasError = Boolean(data.error);
+        errorBox.hidden = !hasError;
+        errorText.textContent = data.error || '';
+      }
+    };
+
+    const poll = async () => {
+      try {
+        const response = await fetch(statusUrl, {
+          credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        render(data);
+        if (activeStatuses.has(data.status)) {
+          window.setTimeout(poll, 3000);
+        }
+      } catch (error) {
+        window.setTimeout(poll, 6000);
+      }
+    };
+
+    poll();
+  })();
+</script>
+{% endblock %}
