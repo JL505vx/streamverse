@@ -2,6 +2,7 @@ import logging
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import threading
 from uuid import uuid4
@@ -15,6 +16,14 @@ from django.utils.text import slugify
 
 DEFAULT_LOCAL_VIDEO_MAX_MB = 2048
 logger = logging.getLogger(__name__)
+
+
+def _ffmpeg_binary() -> str:
+    return os.getenv('FFMPEG_BINARY', 'ffmpeg').strip() or 'ffmpeg'
+
+
+def _ffprobe_binary() -> str:
+    return os.getenv('FFPROBE_BINARY', 'ffprobe').strip() or 'ffprobe'
 
 
 def _safe_filename(filename: str, fallback: str = 'video') -> str:
@@ -45,6 +54,12 @@ def get_local_videos_dir() -> Path:
     videos_dir = Path(settings.MEDIA_ROOT) / 'videos'
     videos_dir.mkdir(parents=True, exist_ok=True)
     return videos_dir
+
+
+def get_local_hls_dir() -> Path:
+    hls_dir = get_local_videos_dir() / 'hls'
+    hls_dir.mkdir(parents=True, exist_ok=True)
+    return hls_dir
 
 
 def _build_local_video_destination(filename: str):
@@ -117,7 +132,7 @@ def append_chunk_to_upload(upload_id: str, filename: str, uploaded_chunk, chunk_
 
 def _count_audio_streams(video_path: Path):
     command = [
-        'ffprobe',
+        _ffprobe_binary(),
         '-v',
         'error',
         '-select_streams',
@@ -144,6 +159,22 @@ def _count_audio_streams(video_path: Path):
     return len([line for line in result.stdout.splitlines() if line.strip()])
 
 
+def _public_url_for_media_path(media_path: Path) -> str:
+    relative_path = media_path.relative_to(Path(settings.MEDIA_ROOT)).as_posix()
+    return f"{settings.MEDIA_URL.rstrip('/')}/{relative_path}"
+
+
+def _build_hls_output(public_url: str, movie_id=None):
+    source_path = resolve_local_media_path(public_url)
+    source_stem = slugify(source_path.stem if source_path else '') or 'video'
+    folder_name = f'{movie_id or uuid4().hex}-{uuid4().hex[:8]}-{source_stem}'
+    output_dir = get_local_hls_dir() / folder_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+    playlist_path = output_dir / 'index.m3u8'
+    playlist_url = _public_url_for_media_path(playlist_path)
+    return output_dir, playlist_path, playlist_url
+
+
 def _update_movie_processing_state(movie_id, *, status=None, step=None):
     if not movie_id:
         return
@@ -163,7 +194,7 @@ def _ensure_browser_compatible_audio(video_path: Path, movie_id=None) -> bool:
     input_audio_count = _count_audio_streams(video_path)
     processed_path = video_path.with_name(f'{video_path.stem}_processed.mp4')
     command = [
-        'ffmpeg',
+        _ffmpeg_binary(),
         '-y',
         '-nostdin',
         '-hide_banner',
@@ -176,27 +207,37 @@ def _ensure_browser_compatible_audio(video_path: Path, movie_id=None) -> bool:
         '-map',
         '0:a?',
         '-c:v',
-        'copy',
+        'libx264',
+        '-preset',
+        os.getenv('FFMPEG_HLS_PRESET', 'veryfast').strip() or 'veryfast',
+        '-crf',
+        os.getenv('FFMPEG_HLS_CRF', '23').strip() or '23',
+        '-profile:v',
+        'main',
+        '-pix_fmt',
+        'yuv420p',
         '-c:a',
         'aac',
         '-b:a',
-        '192k',
+        os.getenv('FFMPEG_HLS_AUDIO_BITRATE', '128k').strip() or '128k',
+        '-ac',
+        '2',
         '-movflags',
         '+faststart',
         str(processed_path),
     ]
 
     logger.info(
-        'Iniciando conversion ffmpeg para compatibilidad navegador input=%s output=%s',
+        'Iniciando conversion MP4 compatible con ffmpeg input=%s output=%s',
         video_path,
         processed_path,
     )
-    _update_movie_processing_state(movie_id, step='convirtiendo')
+    _update_movie_processing_state(movie_id, step='convirtiendo a mp4')
 
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True)
         output_audio_count = _count_audio_streams(processed_path)
-        if not output_audio_count:
+        if input_audio_count != 0 and not output_audio_count:
             logger.error(
                 'ffmpeg genero un archivo sin audio; se conserva el original path=%s audio_entrada=%s stdout=%s stderr=%s',
                 video_path,
@@ -239,6 +280,93 @@ def _ensure_browser_compatible_audio(video_path: Path, movie_id=None) -> bool:
     return True
 
 
+def _generate_hls_playlist(video_path: Path, public_url: str, movie_id=None):
+    _update_movie_processing_state(movie_id, step='generando hls')
+    output_dir, playlist_path, playlist_url = _build_hls_output(public_url, movie_id=movie_id)
+    segment_pattern = output_dir / 'segment_%05d.ts'
+    command = [
+        _ffmpeg_binary(),
+        '-y',
+        '-nostdin',
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-i',
+        str(video_path),
+        '-map',
+        '0:v:0',
+        '-map',
+        '0:a?',
+        '-c:v',
+        'copy',
+        '-c:a',
+        'copy',
+        '-f',
+        'hls',
+        '-hls_time',
+        os.getenv('FFMPEG_HLS_TIME', '6').strip() or '6',
+        '-hls_playlist_type',
+        'vod',
+        '-hls_segment_filename',
+        str(segment_pattern),
+        str(playlist_path),
+    ]
+
+    logger.info(
+        'Iniciando generacion HLS con ffmpeg movie_id=%s input=%s playlist=%s',
+        movie_id,
+        video_path,
+        playlist_path,
+    )
+
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+    except FileNotFoundError:
+        shutil.rmtree(output_dir, ignore_errors=True)
+        logger.error('ffmpeg no esta disponible; no se pudo generar HLS movie_id=%s input=%s', movie_id, video_path)
+        return None
+    except subprocess.CalledProcessError as exc:
+        shutil.rmtree(output_dir, ignore_errors=True)
+        logger.error(
+            'ffmpeg fallo generando HLS movie_id=%s input=%s stderr=%s',
+            movie_id,
+            video_path,
+            (exc.stderr or '').strip(),
+            exc_info=True,
+        )
+        return None
+
+    has_playlist = playlist_path.exists() and playlist_path.stat().st_size > 0
+    has_segments = any(output_dir.glob('*.ts'))
+    if not has_playlist or not has_segments:
+        shutil.rmtree(output_dir, ignore_errors=True)
+        logger.error(
+            'HLS incompleto movie_id=%s playlist=%s has_playlist=%s has_segments=%s stdout=%s stderr=%s',
+            movie_id,
+            playlist_path,
+            has_playlist,
+            has_segments,
+            (result.stdout or '').strip(),
+            (result.stderr or '').strip(),
+        )
+        return None
+
+    logger.info('HLS generado movie_id=%s playlist_url=%s output_dir=%s', movie_id, playlist_url, output_dir)
+    return playlist_url
+
+
+def _mark_movie_hls_ready(movie_id, playlist_url: str):
+    if not movie_id:
+        return
+
+    Movie = apps.get_model('movies', 'Movie')
+    Movie.objects.filter(pk=movie_id).update(
+        video_url=playlist_url,
+        status='listo',
+        processing_step='hls finalizado',
+    )
+
+
 def procesar_video_background(public_url: str, movie_id=None) -> None:
     close_old_connections()
     try:
@@ -254,13 +382,25 @@ def procesar_video_background(public_url: str, movie_id=None) -> None:
             _update_movie_processing_state(movie_id, status='error')
             return
 
+        if video_path.suffix.lower() == '.m3u8':
+            _update_movie_processing_state(movie_id, status='listo', step='hls finalizado')
+            logger.info('Video ya esta en HLS; se omite procesamiento movie_id=%s public_url=%s', movie_id, public_url)
+            return
+
         processed_ok = _ensure_browser_compatible_audio(video_path, movie_id=movie_id)
         if not processed_ok:
             _update_movie_processing_state(movie_id, status='error')
             return
 
-        _update_movie_processing_state(movie_id, status='listo', step='finalizado')
-        logger.info('Procesamiento de video finalizado movie_id=%s public_url=%s', movie_id, public_url)
+        playlist_url = _generate_hls_playlist(video_path, public_url, movie_id=movie_id)
+        if not playlist_url:
+            _update_movie_processing_state(movie_id, status='error')
+            return
+
+        _mark_movie_hls_ready(movie_id, playlist_url)
+        if video_path.exists() and resolve_local_media_path(playlist_url) != video_path:
+            video_path.unlink(missing_ok=True)
+        logger.info('Procesamiento HLS finalizado movie_id=%s playlist_url=%s', movie_id, playlist_url)
     except Exception:
         logger.exception('Error inesperado procesando video en background movie_id=%s public_url=%s', movie_id, public_url)
         _update_movie_processing_state(movie_id, status='error')
@@ -315,5 +455,13 @@ def save_uploaded_video_locally(uploaded_file) -> str:
 
 def delete_local_video(public_url: str) -> None:
     file_path = resolve_local_media_path(public_url)
-    if file_path and file_path.exists():
-        file_path.unlink()
+    if not file_path or not file_path.exists():
+        return
+    hls_root = get_local_hls_dir().resolve()
+    resolved_path = file_path.resolve()
+    if file_path.suffix.lower() == '.m3u8':
+        parent_dir = resolved_path.parent
+        if hls_root in parent_dir.parents or parent_dir == hls_root:
+            shutil.rmtree(parent_dir, ignore_errors=True)
+            return
+    file_path.unlink()

@@ -134,7 +134,7 @@
     </section>
 
     <div class="player-frame" data-player-shell>
-      <video id="stream-player" class="player" playsinline controlsList="nodownload noremoteplayback" disablepictureinpicture preload="metadata" oncontextmenu="return false;" {% if movie.cover_url %}poster="{{ movie.cover_url }}"{% endif %}>
+      <video id="stream-player" class="player" playsinline controlsList="nodownload noremoteplayback" disablepictureinpicture preload="metadata" oncontextmenu="return false;" data-video-url="{{ movie.video_url }}" {% if movie.cover_url %}poster="{{ movie.cover_url }}"{% endif %}>
         {% if movie.video_url %}
           <source src="{{ movie.video_url }}">
         {% endif %}
@@ -237,6 +237,7 @@
 {{ watch_party_bootstrap|json_script:"watch-party-bootstrap" }}
 {{ initial_party_code|json_script:"watch-party-initial-code" }}
 
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js" defer></script>
 <script>
 (function () {
   const player = document.getElementById('stream-player');
@@ -319,6 +320,7 @@
   let partySocketReconnectTimer = null;
   let partySocketHeartbeatTimer = null;
   let partySocketReconnectAttempts = 0;
+  let hlsPlayer = null;
 
   const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
   const playerSettingsKey = 'streamverse-player-settings-v2';
@@ -337,6 +339,35 @@
   const bootstrappedPartyCode = watchPartyInitialCodeNode ? JSON.parse(watchPartyInitialCodeNode.textContent || '""') : '';
   if (playerShell && hasTouchInput) {
     playerShell.classList.add('has-touch-input');
+  }
+
+  function initializeHlsPlayback() {
+    const sourceUrl = player.dataset.videoUrl || player.querySelector('source')?.getAttribute('src') || '';
+    if (!sourceUrl || !sourceUrl.toLowerCase().split('?')[0].endsWith('.m3u8')) {
+      return;
+    }
+
+    if (player.canPlayType('application/vnd.apple.mpegurl')) {
+      player.src = sourceUrl;
+      return;
+    }
+
+    if (!window.Hls || !window.Hls.isSupported()) {
+      return;
+    }
+
+    hlsPlayer = new window.Hls({
+      enableWorker: true,
+      lowLatencyMode: false,
+    });
+    hlsPlayer.loadSource(sourceUrl);
+    hlsPlayer.attachMedia(player);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeHlsPlayback, { once: true });
+  } else {
+    initializeHlsPlayback();
   }
 
   if (bootstrappedParty) {
@@ -1731,6 +1762,9 @@
   window.addEventListener('beforeunload', function () {
     sendProgress(true);
     disconnectWatchPartySocket();
+    if (hlsPlayer) {
+      hlsPlayer.destroy();
+    }
   });
   syncBrightnessLayer();
   syncMeters();

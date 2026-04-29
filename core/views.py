@@ -171,7 +171,12 @@ def media_stream_view(request, path):
         raise Http404('Archivo no encontrado.')
 
     file_size = os.path.getsize(file_path)
-    content_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+    suffix = os.path.splitext(file_path)[1].lower()
+    hls_content_types = {
+        '.m3u8': 'application/vnd.apple.mpegurl',
+        '.ts': 'video/mp2t',
+    }
+    content_type = hls_content_types.get(suffix) or mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
     range_header = request.headers.get('Range', '')
 
     if not range_header:

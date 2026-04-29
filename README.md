@@ -16,6 +16,7 @@ Plataforma personal de streaming hecha con Django para administrar y reproducir 
 - `psycopg`
 - `python-dotenv`
 - `supabase`
+- `ffmpeg` / `ffprobe` disponibles en el sistema para procesar video
 
 ## Base de datos
 
@@ -33,17 +34,15 @@ DATABASE_URL=postgresql://usuario:password@host:5432/postgres?sslmode=require
 Si usas Supabase, el proyecto agrega `sslmode=require` automaticamente si no viene en la URL.
 Aun asi, lo correcto es dejarlo ya incluido en `DATABASE_URL`.
 
-## Storage de archivos
+## Storage y procesamiento de archivos
 
-El proyecto ya no usa `media/` como almacenamiento activo para videos, portadas ni avatars.
+El proyecto usa dos caminos de almacenamiento:
 
-- Los datos del catalogo viven en PostgreSQL (Supabase)
-- Los archivos viven en Supabase Storage
-- Bucket esperado: `movies`
-- Rutas usadas:
-  - `movies/videos/`
-  - `movies/covers/`
-  - `movies/avatars/`
+- Los datos del catalogo viven en PostgreSQL (Supabase).
+- Portadas y avatars subidos desde formularios se guardan en Supabase Storage.
+- Los videos subidos desde el panel admin se guardan temporalmente en `MEDIA_ROOT/videos/`, se procesan en segundo plano con `ffmpeg` y terminan como HLS local en `MEDIA_ROOT/videos/hls/.../index.m3u8`.
+- `Movie.video_url` queda apuntando al `.m3u8` final cuando el procesamiento termina correctamente.
+- `Movie.status` y `Movie.processing_step` guardan el estado: `subiendo`, `procesando`, `listo` o `error`.
 
 ### Variables obligatorias para Storage
 
@@ -56,6 +55,29 @@ Sin esas variables:
 - la app sigue arrancando
 - pero los uploads desde el panel admin mostraran error
 - no se usara almacenamiento local como fallback
+
+### Procesamiento HLS de videos
+
+Cuando un administrador sube un video local:
+
+1. Django guarda el archivo sin bloquear el guardado de la ficha.
+2. Se lanza un thread en background desde `core.local_media.start_video_processing_background`.
+3. El proceso normaliza el audio a AAC/MP4 compatible cuando hace falta.
+4. `ffmpeg` genera `index.m3u8` y segmentos `.ts`.
+5. La base de datos se actualiza para usar el `.m3u8` final.
+6. El reproductor carga automaticamente HLS con `hls.js` cuando el navegador lo necesita.
+
+Variables opcionales:
+
+```env
+FFMPEG_BINARY=ffmpeg
+FFPROBE_BINARY=ffprobe
+FFMPEG_HLS_TIME=6
+FFMPEG_HLS_PRESET=veryfast
+FFMPEG_HLS_CRF=23
+FFMPEG_HLS_AUDIO_BITRATE=128k
+LOCAL_VIDEO_UPLOAD_MAX_MB=2048
+```
 
 ### Migracion de archivos legacy
 
