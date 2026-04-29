@@ -9,7 +9,13 @@ from django.utils import timezone
 
 from movies.models import Genre, Movie
 
-from .local_media import delete_local_video, get_local_video_max_bytes, save_uploaded_video_locally, start_video_processing_background
+from .local_media import (
+    PROCESSING_STAGES,
+    delete_local_video,
+    get_local_video_max_bytes,
+    save_uploaded_video_locally,
+    start_video_processing_background,
+)
 from .models import (
     ContentSuggestion,
     MovieRating,
@@ -85,16 +91,30 @@ def _video_needs_local_processing(movie) -> bool:
 def _mark_video_received(movie):
     movie.status = Movie.ProcessingStatus.PROCESSING
     movie.processing_step = 'recibido'
+    movie.processing_stage = 'upload'
+    movie.processing_progress = PROCESSING_STAGES['upload']
+    movie.processing_started_at = None
+    movie.processing_finished_at = None
+    movie.error_message = ''
 
 
 def _mark_video_ready(movie):
     movie.status = Movie.ProcessingStatus.READY
     movie.processing_step = 'finalizado'
+    movie.processing_stage = 'finalizado'
+    movie.processing_progress = PROCESSING_STAGES['finalizado']
+    movie.processing_finished_at = timezone.now()
+    movie.error_message = ''
 
 
 def _mark_video_empty(movie):
     movie.status = Movie.ProcessingStatus.UPLOADING
     movie.processing_step = ''
+    movie.processing_stage = 'pendiente'
+    movie.processing_progress = 0
+    movie.processing_started_at = None
+    movie.processing_finished_at = None
+    movie.error_message = ''
 
 
 class StyledAuthenticationForm(AuthenticationForm):

@@ -11,11 +11,19 @@ from django.conf import settings
 from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
 from django.db import close_old_connections
+from django.utils import timezone
 from django.utils.text import slugify
 
 
 DEFAULT_LOCAL_VIDEO_MAX_MB = 2048
 logger = logging.getLogger(__name__)
+PROCESSING_STAGES = {
+    'upload': 10,
+    'analisis': 20,
+    'transcode': 50,
+    'hls': 90,
+    'finalizado': 100,
+}
 
 
 def _ffmpeg_binary() -> str:
@@ -175,7 +183,19 @@ def _build_hls_output(public_url: str, movie_id=None):
     return output_dir, playlist_path, playlist_url
 
 
-def _update_movie_processing_state(movie_id, *, status=None, step=None):
+def _update_movie_processing_state(
+    movie_id,
+    *,
+    status=None,
+    step=None,
+    stage=None,
+    progress=None,
+    started_at=None,
+    finished_at=None,
+    clear_finished_at=False,
+    error_message=None,
+    clear_error=False,
+):
     if not movie_id:
         return
 
@@ -185,12 +205,28 @@ def _update_movie_processing_state(movie_id, *, status=None, step=None):
         updates['status'] = status
     if step is not None:
         updates['processing_step'] = step
+    if stage is not None:
+        updates['processing_stage'] = stage
+        if progress is None and stage in PROCESSING_STAGES:
+            updates['processing_progress'] = PROCESSING_STAGES[stage]
+    if progress is not None:
+        updates['processing_progress'] = max(0, min(100, int(progress)))
+    if started_at is not None:
+        updates['processing_started_at'] = started_at
+    if finished_at is not None:
+        updates['processing_finished_at'] = finished_at
+    elif clear_finished_at:
+        updates['processing_finished_at'] = None
+    if error_message is not None:
+        updates['error_message'] = str(error_message)
+    elif clear_error:
+        updates['error_message'] = ''
     if updates:
         Movie.objects.filter(pk=movie_id).update(**updates)
 
 
 def _ensure_browser_compatible_audio(video_path: Path, movie_id=None) -> bool:
-    _update_movie_processing_state(movie_id, step='analizando audio')
+    _update_movie_processing_state(movie_id, step='analizando audio', stage='analisis')
     input_audio_count = _count_audio_streams(video_path)
     processed_path = video_path.with_name(f'{video_path.stem}_processed.mp4')
     command = [
@@ -232,7 +268,7 @@ def _ensure_browser_compatible_audio(video_path: Path, movie_id=None) -> bool:
         video_path,
         processed_path,
     )
-    _update_movie_processing_state(movie_id, step='convirtiendo a mp4')
+    _update_movie_processing_state(movie_id, step='convirtiendo a mp4', stage='transcode')
 
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True)
@@ -281,7 +317,7 @@ def _ensure_browser_compatible_audio(video_path: Path, movie_id=None) -> bool:
 
 
 def _generate_hls_playlist(video_path: Path, public_url: str, movie_id=None):
-    _update_movie_processing_state(movie_id, step='generando hls')
+    _update_movie_processing_state(movie_id, step='generando hls', stage='hls')
     output_dir, playlist_path, playlist_url = _build_hls_output(public_url, movie_id=movie_id)
     segment_pattern = output_dir / 'segment_%05d.ts'
     command = [
@@ -364,46 +400,98 @@ def _mark_movie_hls_ready(movie_id, playlist_url: str):
         video_url=playlist_url,
         status='listo',
         processing_step='hls finalizado',
+        processing_stage='finalizado',
+        processing_progress=PROCESSING_STAGES['finalizado'],
+        processing_finished_at=timezone.now(),
+        error_message='',
     )
 
 
 def procesar_video_background(public_url: str, movie_id=None) -> None:
     close_old_connections()
     try:
-        _update_movie_processing_state(movie_id, status='procesando', step='recibido')
+        _update_movie_processing_state(
+            movie_id,
+            status='procesando',
+            step='recibido',
+            stage='upload',
+            started_at=timezone.now(),
+            clear_finished_at=True,
+            clear_error=True,
+        )
         video_path = resolve_local_media_path(public_url)
         if not video_path or not video_path.exists():
+            error = f'Archivo local no existe: {public_url}'
             logger.error(
                 'No se pudo procesar video en background; archivo local no existe movie_id=%s public_url=%s path=%s',
                 movie_id,
                 public_url,
                 video_path,
             )
-            _update_movie_processing_state(movie_id, status='error')
+            _update_movie_processing_state(
+                movie_id,
+                status='error',
+                step='error',
+                stage='error',
+                progress=0,
+                finished_at=timezone.now(),
+                error_message=error,
+            )
             return
 
         if video_path.suffix.lower() == '.m3u8':
-            _update_movie_processing_state(movie_id, status='listo', step='hls finalizado')
+            _update_movie_processing_state(
+                movie_id,
+                status='listo',
+                step='hls finalizado',
+                stage='finalizado',
+                finished_at=timezone.now(),
+                clear_error=True,
+            )
             logger.info('Video ya esta en HLS; se omite procesamiento movie_id=%s public_url=%s', movie_id, public_url)
             return
 
         processed_ok = _ensure_browser_compatible_audio(video_path, movie_id=movie_id)
         if not processed_ok:
-            _update_movie_processing_state(movie_id, status='error')
+            _update_movie_processing_state(
+                movie_id,
+                status='error',
+                step='error',
+                stage='error',
+                progress=0,
+                finished_at=timezone.now(),
+                error_message='No se pudo convertir el video a MP4 compatible.',
+            )
             return
 
         playlist_url = _generate_hls_playlist(video_path, public_url, movie_id=movie_id)
         if not playlist_url:
-            _update_movie_processing_state(movie_id, status='error')
+            _update_movie_processing_state(
+                movie_id,
+                status='error',
+                step='error',
+                stage='error',
+                progress=0,
+                finished_at=timezone.now(),
+                error_message='No se pudo generar HLS para el video.',
+            )
             return
 
         _mark_movie_hls_ready(movie_id, playlist_url)
         if video_path.exists() and resolve_local_media_path(playlist_url) != video_path:
             video_path.unlink(missing_ok=True)
         logger.info('Procesamiento HLS finalizado movie_id=%s playlist_url=%s', movie_id, playlist_url)
-    except Exception:
+    except Exception as exc:
         logger.exception('Error inesperado procesando video en background movie_id=%s public_url=%s', movie_id, public_url)
-        _update_movie_processing_state(movie_id, status='error')
+        _update_movie_processing_state(
+            movie_id,
+            status='error',
+            step='error',
+            stage='error',
+            progress=0,
+            finished_at=timezone.now(),
+            error_message=str(exc),
+        )
     finally:
         close_old_connections()
 
