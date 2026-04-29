@@ -64,14 +64,21 @@
         <td>{{ movie.release_year }}</td>
         <td>{{ movie.video_storage_label }}</td>
         <td>{% if movie.is_published %}Publicado{% else %}Borrador{% endif %}</td>
-        <td>
-          <span class="catalog-status {% if movie.status == 'listo' %}is-live{% elif movie.status == 'error' %}is-draft{% else %}is-processing{% endif %}" data-video-status-badge data-video-id="{{ movie.pk }}">
-            {{ movie.get_status_display }}{% if movie.processing_step %} - {{ movie.processing_step }}{% endif %}
+        <td data-video-processing-row data-video-id="{{ movie.pk }}">
+          <span class="catalog-status {% if movie.status == 'listo' %}is-live{% elif movie.status == 'error' %}is-error{% elif movie.status == 'procesando' or movie.status == 'subiendo' %}is-processing{% else %}is-draft{% endif %}" data-video-status-badge>
+            {{ movie.get_status_display }}
           </span>
+          <div class="catalog-processing">
+            <div class="catalog-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ movie.processing_progress|default:0 }}" data-video-progress-track>
+              <span style="width:{{ movie.processing_progress|default:0 }}%" data-video-progress-fill></span>
+            </div>
+            <small data-video-processing-text>{{ movie.processing_progress|default:0 }}% | {{ movie.processing_stage|default:"pendiente" }}{% if movie.processing_step %} - {{ movie.processing_step }}{% endif %}</small>
+          </div>
         </td>
         <td class="actions">
           <a class="btn-primary" href="{% url 'admin_movie_media' movie.pk %}">Archivos</a>
           <a class="btn-ghost" href="{% url 'admin_movie_edit' movie.pk %}">Editar</a>
+          <a class="btn-ghost" href="{% url 'admin_movie_processing_detail' movie.pk %}">Detalles</a>
           <a class="btn-mini" href="{% url 'admin_movie_delete' movie.pk %}">Eliminar</a>
         </td>
       </tr>
@@ -106,13 +113,24 @@
       </div>
       <div>
         <dt>Procesamiento</dt>
-        <dd data-video-status-badge data-video-id="{{ movie.pk }}">{{ movie.get_status_display }}{% if movie.processing_step %} - {{ movie.processing_step }}{% endif %}</dd>
+        <dd data-video-processing-row data-video-id="{{ movie.pk }}">
+          <span class="catalog-status {% if movie.status == 'listo' %}is-live{% elif movie.status == 'error' %}is-error{% elif movie.status == 'procesando' or movie.status == 'subiendo' %}is-processing{% else %}is-draft{% endif %}" data-video-status-badge>
+            {{ movie.get_status_display }}
+          </span>
+          <div class="catalog-processing">
+            <div class="catalog-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ movie.processing_progress|default:0 }}" data-video-progress-track>
+              <span style="width:{{ movie.processing_progress|default:0 }}%" data-video-progress-fill></span>
+            </div>
+            <small data-video-processing-text>{{ movie.processing_progress|default:0 }}% | {{ movie.processing_stage|default:"pendiente" }}{% if movie.processing_step %} - {{ movie.processing_step }}{% endif %}</small>
+          </div>
+        </dd>
       </div>
     </dl>
 
     <div class="catalog-action-stack">
       <a class="btn-primary" href="{% url 'admin_movie_media' movie.pk %}">Archivos</a>
       <a class="btn-ghost" href="{% url 'admin_movie_edit' movie.pk %}">Editar</a>
+      <a class="btn-ghost" href="{% url 'admin_movie_processing_detail' movie.pk %}">Detalles</a>
       <a class="btn-mini" href="{% url 'admin_movie_delete' movie.pk %}">Eliminar</a>
     </div>
   </article>
@@ -124,29 +142,51 @@
 </div>
 <script>
   (() => {
-    const badges = Array.from(document.querySelectorAll('[data-video-status-badge][data-video-id]'));
-    if (!badges.length) return;
+    const rows = Array.from(document.querySelectorAll('[data-video-processing-row][data-video-id]'));
+    if (!rows.length) return;
 
     const activeStatuses = new Set(['subiendo', 'procesando']);
+    const setBadgeClass = (badge, status) => {
+      if (!badge) return;
+      badge.classList.remove('is-live', 'is-draft', 'is-processing', 'is-error');
+      if (status === 'listo') badge.classList.add('is-live');
+      else if (status === 'error') badge.classList.add('is-error');
+      else if (activeStatuses.has(status)) badge.classList.add('is-processing');
+      else badge.classList.add('is-draft');
+    };
+
     const refresh = async () => {
       let hasActive = false;
-      await Promise.all(badges.map(async (badge) => {
+      await Promise.all(rows.map(async (row) => {
         try {
-          const response = await fetch(`/api/video/${badge.dataset.videoId}/status`, {
+          const response = await fetch(`/api/video/${row.dataset.videoId}/status`, {
             credentials: 'same-origin',
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
           });
           if (!response.ok) return;
           const data = await response.json();
-          badge.textContent = data.step ? `${data.status_label} - ${data.step}` : data.status_label;
-          badge.dataset.status = data.status;
+          const badge = row.querySelector('[data-video-status-badge]');
+          const fill = row.querySelector('[data-video-progress-fill]');
+          const track = row.querySelector('[data-video-progress-track]');
+          const text = row.querySelector('[data-video-processing-text]');
+          const progress = Math.max(0, Math.min(100, Number(data.progress || 0)));
+          if (badge) {
+            badge.textContent = data.status_label || data.status;
+            badge.dataset.status = data.status;
+            setBadgeClass(badge, data.status);
+          }
+          if (fill) fill.style.width = `${progress}%`;
+          if (track) track.setAttribute('aria-valuenow', String(progress));
+          if (text) {
+            text.textContent = `${progress}% | ${data.stage || 'pendiente'}${data.step ? ` - ${data.step}` : ''}`;
+          }
           if (activeStatuses.has(data.status)) hasActive = true;
         } catch (error) {
           console.error('No se pudo consultar estado de video', error);
         }
       }));
       if (hasActive) {
-        window.setTimeout(refresh, 4000);
+        window.setTimeout(refresh, 3000);
       }
     };
 
