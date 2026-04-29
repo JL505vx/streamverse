@@ -2484,6 +2484,29 @@ h3 { font-size: clamp(1.1rem, 2vw, 1.4rem); }
   backdrop-filter: blur(10px);
 }
 
+.player-quality-select {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(4, 12, 28, 0.72);
+  color: #fff;
+  border-radius: var(--r-full);
+  min-height: 2.45rem;
+  padding: 0 1.75rem 0 0.75rem;
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 0.78rem) 50%, calc(100% - 0.52rem) 50%;
+  background-size: 0.28rem 0.28rem, 0.28rem 0.28rem;
+  background-repeat: no-repeat;
+}
+
+.player-quality-select[hidden] {
+  display: none;
+}
+
 .player-mini-action {
   appearance: none;
   border: 1px solid rgba(255, 255, 255, 0.14);

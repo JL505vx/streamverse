@@ -20,10 +20,45 @@ logger = logging.getLogger(__name__)
 PROCESSING_STAGES = {
     'upload': 10,
     'analisis': 20,
-    'transcode': 50,
-    'hls': 90,
+    'transcode': 40,
+    'hls_360p': 60,
+    'hls_480p': 75,
+    'hls_720p': 90,
     'finalizado': 100,
 }
+
+HLS_RENDITIONS = [
+    {
+        'stage': 'hls_360p',
+        'label': '360p',
+        'width': 640,
+        'height': 360,
+        'bitrate': '600k',
+        'maxrate': '700k',
+        'bufsize': '1000k',
+        'bandwidth': 800000,
+    },
+    {
+        'stage': 'hls_480p',
+        'label': '480p',
+        'width': 854,
+        'height': 480,
+        'bitrate': '1000k',
+        'maxrate': '1200k',
+        'bufsize': '1500k',
+        'bandwidth': 1300000,
+    },
+    {
+        'stage': 'hls_720p',
+        'label': '720p',
+        'width': 1280,
+        'height': 720,
+        'bitrate': '2500k',
+        'maxrate': '2800k',
+        'bufsize': '4000k',
+        'bandwidth': 3000000,
+    },
+]
 
 
 def _ffmpeg_binary() -> str:
@@ -172,13 +207,13 @@ def _public_url_for_media_path(media_path: Path) -> str:
     return f"{settings.MEDIA_URL.rstrip('/')}/{relative_path}"
 
 
-def _build_hls_output(public_url: str, movie_id=None):
-    source_path = resolve_local_media_path(public_url)
-    source_stem = slugify(source_path.stem if source_path else '') or 'video'
-    folder_name = f'{movie_id or uuid4().hex}-{uuid4().hex[:8]}-{source_stem}'
+def _build_hls_output(movie_id=None):
+    folder_name = str(movie_id) if movie_id else uuid4().hex
     output_dir = get_local_hls_dir() / folder_name
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    playlist_path = output_dir / 'index.m3u8'
+    playlist_path = output_dir / 'master.m3u8'
     playlist_url = _public_url_for_media_path(playlist_path)
     return output_dir, playlist_path, playlist_url
 
@@ -316,10 +351,29 @@ def _ensure_browser_compatible_audio(video_path: Path, movie_id=None) -> bool:
     return True
 
 
-def _generate_hls_playlist(video_path: Path, public_url: str, movie_id=None):
-    _update_movie_processing_state(movie_id, step='generando hls', stage='hls')
-    output_dir, playlist_path, playlist_url = _build_hls_output(public_url, movie_id=movie_id)
-    segment_pattern = output_dir / 'segment_%05d.ts'
+def _write_master_playlist(master_path: Path):
+    lines = ['#EXTM3U', '#EXT-X-VERSION:3']
+    for rendition in HLS_RENDITIONS:
+        lines.append(
+            '#EXT-X-STREAM-INF:'
+            f'BANDWIDTH={rendition["bandwidth"]},'
+            f'RESOLUTION={rendition["width"]}x{rendition["height"]},'
+            'CODECS="avc1.4d401f,mp4a.40.2"'
+        )
+        lines.append(f'{rendition["label"]}/index.m3u8')
+    master_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+
+def _generate_hls_rendition(video_path: Path, output_dir: Path, rendition: dict, movie_id=None) -> bool:
+    label = rendition['label']
+    rendition_dir = output_dir / label
+    rendition_dir.mkdir(parents=True, exist_ok=True)
+    playlist_path = rendition_dir / 'index.m3u8'
+    segment_pattern = rendition_dir / 'segment_%03d.ts'
+    scale_filter = (
+        f'scale=w={rendition["width"]}:h={rendition["height"]}:force_original_aspect_ratio=decrease,'
+        f'pad={rendition["width"]}:{rendition["height"]}:(ow-iw)/2:(oh-ih)/2'
+    )
     command = [
         _ffmpeg_binary(),
         '-y',
@@ -334,9 +388,33 @@ def _generate_hls_playlist(video_path: Path, public_url: str, movie_id=None):
         '-map',
         '0:a?',
         '-c:v',
-        'copy',
+        'libx264',
+        '-preset',
+        os.getenv('FFMPEG_HLS_PRESET', 'veryfast').strip() or 'veryfast',
+        '-profile:v',
+        'main',
+        '-pix_fmt',
+        'yuv420p',
+        '-vf',
+        scale_filter,
+        '-b:v',
+        rendition['bitrate'],
+        '-maxrate',
+        rendition['maxrate'],
+        '-bufsize',
+        rendition['bufsize'],
+        '-g',
+        '48',
+        '-keyint_min',
+        '48',
+        '-sc_threshold',
+        '0',
         '-c:a',
-        'copy',
+        'aac',
+        '-b:a',
+        os.getenv('FFMPEG_HLS_AUDIO_BITRATE', '128k').strip() or '128k',
+        '-ac',
+        '2',
         '-f',
         'hls',
         '-hls_time',
@@ -349,7 +427,8 @@ def _generate_hls_playlist(video_path: Path, public_url: str, movie_id=None):
     ]
 
     logger.info(
-        'Iniciando generacion HLS con ffmpeg movie_id=%s input=%s playlist=%s',
+        'Iniciando rendicion HLS %s movie_id=%s input=%s playlist=%s',
+        label,
         movie_id,
         video_path,
         playlist_path,
@@ -358,26 +437,25 @@ def _generate_hls_playlist(video_path: Path, public_url: str, movie_id=None):
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True)
     except FileNotFoundError:
-        shutil.rmtree(output_dir, ignore_errors=True)
         logger.error('ffmpeg no esta disponible; no se pudo generar HLS movie_id=%s input=%s', movie_id, video_path)
-        return None
+        return False
     except subprocess.CalledProcessError as exc:
-        shutil.rmtree(output_dir, ignore_errors=True)
         logger.error(
-            'ffmpeg fallo generando HLS movie_id=%s input=%s stderr=%s',
+            'ffmpeg fallo generando HLS %s movie_id=%s input=%s stderr=%s',
+            label,
             movie_id,
             video_path,
             (exc.stderr or '').strip(),
             exc_info=True,
         )
-        return None
+        return False
 
     has_playlist = playlist_path.exists() and playlist_path.stat().st_size > 0
-    has_segments = any(output_dir.glob('*.ts'))
+    has_segments = any(rendition_dir.glob('*.ts'))
     if not has_playlist or not has_segments:
-        shutil.rmtree(output_dir, ignore_errors=True)
         logger.error(
-            'HLS incompleto movie_id=%s playlist=%s has_playlist=%s has_segments=%s stdout=%s stderr=%s',
+            'HLS incompleto %s movie_id=%s playlist=%s has_playlist=%s has_segments=%s stdout=%s stderr=%s',
+            label,
             movie_id,
             playlist_path,
             has_playlist,
@@ -385,9 +463,34 @@ def _generate_hls_playlist(video_path: Path, public_url: str, movie_id=None):
             (result.stdout or '').strip(),
             (result.stderr or '').strip(),
         )
+        return False
+
+    logger.info('Rendicion HLS generada movie_id=%s label=%s output_dir=%s', movie_id, label, rendition_dir)
+    return True
+
+
+def _generate_hls_playlist(video_path: Path, movie_id=None):
+    output_dir, playlist_path, playlist_url = _build_hls_output(movie_id=movie_id)
+
+    for rendition in HLS_RENDITIONS:
+        _update_movie_processing_state(
+            movie_id,
+            step=f'generando hls {rendition["label"]}',
+            stage=rendition['stage'],
+        )
+        if not _generate_hls_rendition(video_path, output_dir, rendition, movie_id=movie_id):
+            shutil.rmtree(output_dir, ignore_errors=True)
+            return None
+
+    _write_master_playlist(playlist_path)
+    has_master = playlist_path.exists() and playlist_path.stat().st_size > 0
+    has_playlists = all((output_dir / rendition['label'] / 'index.m3u8').exists() for rendition in HLS_RENDITIONS)
+    if not has_master or not has_playlists:
+        shutil.rmtree(output_dir, ignore_errors=True)
+        logger.error('Master HLS incompleto movie_id=%s master=%s', movie_id, playlist_path)
         return None
 
-    logger.info('HLS generado movie_id=%s playlist_url=%s output_dir=%s', movie_id, playlist_url, output_dir)
+    logger.info('HLS multi-bitrate generado movie_id=%s playlist_url=%s output_dir=%s', movie_id, playlist_url, output_dir)
     return playlist_url
 
 
@@ -464,7 +567,7 @@ def procesar_video_background(public_url: str, movie_id=None) -> None:
             )
             return
 
-        playlist_url = _generate_hls_playlist(video_path, public_url, movie_id=movie_id)
+        playlist_url = _generate_hls_playlist(video_path, movie_id=movie_id)
         if not playlist_url:
             _update_movie_processing_state(
                 movie_id,

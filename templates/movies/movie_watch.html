@@ -166,6 +166,9 @@
             <span>K · J/L · M</span>
           </div>
           <div class="player-top-actions">
+            <select class="player-quality-select" data-quality-select aria-label="Calidad de video" hidden>
+              <option value="-1">Auto</option>
+            </select>
             <button type="button" class="player-mini-action player-mini-action-volume" data-volume-toggle aria-label="Volumen">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M5 10h3l4-4v12l-4-4H5z"></path>
@@ -257,6 +260,7 @@
   const touchJumpZones = document.querySelectorAll('[data-touch-jump]');
   const fullscreenToggleBtn = document.querySelector('[data-fullscreen-toggle]');
   const volumeToggleBtn = document.querySelector('[data-volume-toggle]');
+  const qualitySelect = document.querySelector('[data-quality-select]');
   const volumePopover = document.querySelector('[data-volume-popover]');
   const volumeSlider = document.querySelector('[data-volume-slider]');
   const brightnessLayer = document.querySelector('[data-brightness-layer]');
@@ -359,9 +363,62 @@
     hlsPlayer = new window.Hls({
       enableWorker: true,
       lowLatencyMode: false,
+      capLevelToPlayerSize: true,
+      startLevel: -1,
     });
     hlsPlayer.loadSource(sourceUrl);
     hlsPlayer.attachMedia(player);
+    hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, function () {
+      renderQualityOptions();
+    });
+    hlsPlayer.on(window.Hls.Events.LEVEL_SWITCHED, function (event, data) {
+      syncQualitySelect(data.level);
+    });
+  }
+
+  function qualityLabel(level) {
+    if (!level) return 'Auto';
+    if (level.height) return `${level.height}p`;
+    if (level.bitrate) return `${Math.round(level.bitrate / 1000)}k`;
+    return 'Calidad';
+  }
+
+  function renderQualityOptions() {
+    if (!qualitySelect || !hlsPlayer || !hlsPlayer.levels || !hlsPlayer.levels.length) return;
+    const currentValue = qualitySelect.value || '-1';
+    qualitySelect.innerHTML = '<option value="-1">Auto</option>';
+    hlsPlayer.levels.forEach((level, index) => {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = qualityLabel(level);
+      qualitySelect.appendChild(option);
+    });
+    qualitySelect.value = currentValue;
+    qualitySelect.hidden = false;
+  }
+
+  function syncQualitySelect(activeLevel) {
+    if (!qualitySelect || !hlsPlayer) return;
+    if (hlsPlayer.autoLevelEnabled) {
+      qualitySelect.value = '-1';
+    } else if (Number.isInteger(activeLevel) && activeLevel >= 0) {
+      qualitySelect.value = String(activeLevel);
+    }
+  }
+
+  function setManualQuality(value) {
+    if (!hlsPlayer) return;
+    const nextLevel = Number(value);
+    if (nextLevel < 0) {
+      hlsPlayer.currentLevel = -1;
+      hlsPlayer.nextLevel = -1;
+      showHud('Calidad Auto');
+      return;
+    }
+    hlsPlayer.currentLevel = nextLevel;
+    hlsPlayer.nextLevel = nextLevel;
+    const level = hlsPlayer.levels[nextLevel];
+    showHud(`Calidad ${qualityLabel(level)}`);
   }
 
   if (document.readyState === 'loading') {
@@ -1477,6 +1534,13 @@
       showMeters('right', 2600);
       showVolumePopover();
       showHud(`Vol ${value}%`);
+      nudgeOverlay();
+    });
+  }
+
+  if (qualitySelect) {
+    qualitySelect.addEventListener('change', function () {
+      setManualQuality(qualitySelect.value);
       nudgeOverlay();
     });
   }

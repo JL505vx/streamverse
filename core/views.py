@@ -293,7 +293,9 @@ def _build_processing_timeline(movie):
         'upload': 'Upload',
         'analisis': 'Analisis',
         'transcode': 'Transcode',
-        'hls': 'HLS',
+        'hls_360p': 'HLS 360p',
+        'hls_480p': 'HLS 480p',
+        'hls_720p': 'HLS 720p',
         'finalizado': 'Finalizado',
     }
     current_progress = int(movie.processing_progress or 0)
