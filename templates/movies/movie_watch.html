@@ -240,7 +240,7 @@
 {{ watch_party_bootstrap|json_script:"watch-party-bootstrap" }}
 {{ initial_party_code|json_script:"watch-party-initial-code" }}
 
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"></script>
 <script>
 (function () {
   const player = document.getElementById('stream-player');
@@ -369,6 +369,8 @@
     hlsPlayer.loadSource(sourceUrl);
     hlsPlayer.attachMedia(player);
     hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, function () {
+      console.log('HLS quality levels', hlsPlayer.levels);
+      hlsPlayer.currentLevel = -1;
       renderQualityOptions();
     });
     hlsPlayer.on(window.Hls.Events.LEVEL_SWITCHED, function (event, data) {
@@ -393,7 +395,9 @@
       option.textContent = qualityLabel(level);
       qualitySelect.appendChild(option);
     });
-    qualitySelect.value = currentValue;
+    qualitySelect.value = Array.from(qualitySelect.options).some((option) => option.value === currentValue)
+      ? currentValue
+      : '-1';
     qualitySelect.hidden = false;
   }
 
@@ -411,12 +415,11 @@
     const nextLevel = Number(value);
     if (nextLevel < 0) {
       hlsPlayer.currentLevel = -1;
-      hlsPlayer.nextLevel = -1;
       showHud('Calidad Auto');
       return;
     }
+    if (!hlsPlayer.levels || !hlsPlayer.levels[nextLevel]) return;
     hlsPlayer.currentLevel = nextLevel;
-    hlsPlayer.nextLevel = nextLevel;
     const level = hlsPlayer.levels[nextLevel];
     showHud(`Calidad ${qualityLabel(level)}`);
   }
