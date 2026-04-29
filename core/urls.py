@@ -16,6 +16,7 @@ from .views import (
     admin_movie_edit_view,
     admin_movie_list_view,
     admin_movie_media_view,
+    admin_movie_processing_detail_view,
     admin_panel_view,
     admin_user_create_view,
     admin_user_edit_view,
@@ -68,6 +69,7 @@ urlpatterns = [
     path('panel-admin/peliculas/carga-rapida/', admin_movie_bulk_create_view, name='admin_movie_bulk_create'),
     path('panel-admin/peliculas/<int:pk>/editar/', admin_movie_edit_view, name='admin_movie_edit'),
     path('panel-admin/peliculas/<int:pk>/archivos/', admin_movie_media_view, name='admin_movie_media'),
+    path('panel-admin/peliculas/<int:pk>/procesamiento/', admin_movie_processing_detail_view, name='admin_movie_processing_detail'),
     path('panel-admin/peliculas/<int:pk>/eliminar/', admin_movie_delete_view, name='admin_movie_delete'),
 
     path('panel-admin/generos/', admin_genre_list_view, name='admin_genres'),

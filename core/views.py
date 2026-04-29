@@ -49,7 +49,7 @@ from .models import (
     UserProfile,
 )
 from .session_scopes import resolve_auth_scope
-from .local_media import append_chunk_to_upload, delete_local_video, finalize_chunk_upload
+from .local_media import PROCESSING_STAGES, append_chunk_to_upload, delete_local_video, finalize_chunk_upload
 from .supabase_storage import delete_public_file
 
 
@@ -274,6 +274,11 @@ def video_processing_status_view(request, pk):
             'status': movie.status,
             'status_label': movie.get_status_display(),
             'step': movie.processing_step or '',
+            'stage': movie.processing_stage,
+            'progress': movie.processing_progress,
+            'started_at': movie.processing_started_at.isoformat() if movie.processing_started_at else None,
+            'finished_at': movie.processing_finished_at.isoformat() if movie.processing_finished_at else None,
+            'error': movie.error_message or '',
             'message': (
                 f'{movie.get_status_display()} - {movie.processing_step}'
                 if movie.processing_step
@@ -281,6 +286,52 @@ def video_processing_status_view(request, pk):
             ),
         }
     )
+
+
+def _build_processing_timeline(movie):
+    labels = {
+        'upload': 'Upload',
+        'analisis': 'Analisis',
+        'transcode': 'Transcode',
+        'hls': 'HLS',
+        'finalizado': 'Finalizado',
+    }
+    current_progress = int(movie.processing_progress or 0)
+    current_stage = movie.processing_stage or 'pendiente'
+    timeline = []
+    for stage, percent in PROCESSING_STAGES.items():
+        if movie.status == Movie.ProcessingStatus.ERROR:
+            state = 'error' if stage == current_stage else 'pending'
+        elif current_stage == stage:
+            state = 'active' if current_progress < 100 else 'complete'
+        elif current_progress >= percent:
+            state = 'complete'
+        else:
+            state = 'pending'
+        timeline.append(
+            {
+                'key': stage,
+                'label': labels.get(stage, stage.title()),
+                'percent': percent,
+                'state': state,
+            }
+        )
+    return timeline
+
+
+def _format_processing_elapsed(movie):
+    start = movie.processing_started_at
+    end = movie.processing_finished_at or timezone.now()
+    if not start:
+        return 'Sin iniciar'
+    total_seconds = max(int((end - start).total_seconds()), 0)
+    minutes, seconds = divmod(total_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f'{hours} h {minutes} min {seconds} s'
+    if minutes:
+        return f'{minutes} min {seconds} s'
+    return f'{seconds} s'
 
 
 class RoleLoginView(LoginView):
@@ -1106,6 +1157,17 @@ def admin_movie_media_view(request, pk):
         _log_invalid_movie_form('archivos', form)
 
     return render(request, 'core/admin/movie_media_form.html', {'form': form, 'movie': movie})
+
+
+@admin_required
+def admin_movie_processing_detail_view(request, pk):
+    movie = get_object_or_404(Movie.objects.select_related('genre'), pk=pk)
+    context = {
+        'movie': movie,
+        'timeline': _build_processing_timeline(movie),
+        'elapsed_label': _format_processing_elapsed(movie),
+    }
+    return render(request, 'core/admin/movie_processing_detail.html', context)
 
 
 @admin_required
