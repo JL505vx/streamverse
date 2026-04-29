@@ -284,6 +284,11 @@ def video_processing_status_view(request, pk):
                 if movie.processing_step
                 else movie.get_status_display()
             ),
+            'video_native_quality': movie.video_quality_native_label,
+            'video_original_width': movie.video_original_width,
+            'video_original_height': movie.video_original_height,
+            'video_available_qualities': movie.video_available_qualities_list,
+            'video_default_quality': movie.video_default_quality,
         }
     )
 

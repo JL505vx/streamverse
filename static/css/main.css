@@ -2486,11 +2486,17 @@ h3 { font-size: clamp(1.1rem, 2vw, 1.4rem); }
 
 .player-quality-select {
   appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(4, 12, 28, 0.72);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  display: inline-block;        /* nunca quedar oculto por display:none heredado */
+  visibility: visible;          /* defensivo: no permitir que se oculte por visibility */
+  opacity: 1;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgba(4, 12, 28, 0.72);
   color: #fff;
   border-radius: var(--r-full);
   min-height: 2.45rem;
+  min-width: 4.6rem;
   padding: 0 1.75rem 0 0.75rem;
   font-size: 0.76rem;
   font-weight: 800;
@@ -2501,10 +2507,26 @@ h3 { font-size: clamp(1.1rem, 2vw, 1.4rem); }
   background-position: calc(100% - 0.78rem) 50%, calc(100% - 0.52rem) 50%;
   background-size: 0.28rem 0.28rem, 0.28rem 0.28rem;
   background-repeat: no-repeat;
+  pointer-events: auto;
 }
 
+/* El JS ya no aplica el atributo [hidden]; mantenemos esta regla
+   solo por seguridad si alguna integracion futura lo vuelve a setear. */
 .player-quality-select[hidden] {
   display: none;
+}
+
+.player-quality-select:disabled {
+  opacity: 0.72;
+  cursor: default;
+}
+
+/* Las opciones del <select> deben ser legibles en sistemas que usan
+   los colores nativos del SO (algunos navegadores ignoran el color
+   del select para las options). */
+.player-quality-select option {
+  background-color: #0b1426;
+  color: #fff;
 }
 
 .player-mini-action {

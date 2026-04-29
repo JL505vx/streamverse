@@ -54,6 +54,15 @@ class Movie(models.Model):
     processing_started_at = models.DateTimeField(blank=True, null=True)
     processing_finished_at = models.DateTimeField(blank=True, null=True)
     error_message = models.TextField(blank=True, null=True)
+    # Metadatos detectados con ffprobe sobre el video original
+    video_original_width = models.PositiveIntegerField(default=0)
+    video_original_height = models.PositiveIntegerField(default=0)
+    # Calidades HLS realmente generadas para esta pelicula (ej. "360p,480p,720p").
+    # Vacio = video legado sin pipeline multi-bitrate.
+    video_available_qualities = models.CharField(max_length=120, blank=True, default='')
+    # Calidad por defecto en la que arranca el reproductor (ej. "720p").
+    # Vacio = el player arranca en Auto (videos antiguos).
+    video_default_quality = models.CharField(max_length=12, blank=True, default='')
     is_published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -116,6 +125,44 @@ class Movie(models.Model):
             or self.video_upload_duration_ms
             or self.video_uploaded_at
         )
+
+    @property
+    def video_quality_native_label(self):
+        """Etiqueta legible de la resolucion original detectada (480p, 720p, 1080p, etc)."""
+        height = int(self.video_original_height or 0)
+        if height <= 0:
+            return ''
+        # Redondeo amistoso a las resoluciones tipicas
+        if height >= 2160:
+            return '2160p'
+        if height >= 1440:
+            return '1440p'
+        if height >= 1080:
+            return '1080p'
+        if height >= 720:
+            return '720p'
+        if height >= 480:
+            return '480p'
+        if height >= 360:
+            return '360p'
+        if height >= 240:
+            return '240p'
+        return f'{height}p'
+
+    @property
+    def video_available_qualities_list(self):
+        """Devuelve la lista de calidades HLS generadas como lista de strings."""
+        raw = (self.video_available_qualities or '').strip()
+        if not raw:
+            return []
+        return [item.strip() for item in raw.split(',') if item.strip()]
+
+    @property
+    def video_quality_summary(self):
+        """Resumen para mostrar en admin: calidad nativa + calidades servidas."""
+        native = self.video_quality_native_label or 'desconocida'
+        served = ', '.join(self.video_available_qualities_list) or 'no disponible'
+        return f'Original {native} | HLS {served}'
 
     @property
     def video_upload_duration_label(self):

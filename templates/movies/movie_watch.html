@@ -134,7 +134,7 @@
     </section>
 
     <div class="player-frame" data-player-shell>
-      <video id="stream-player" class="player" playsinline controlsList="nodownload noremoteplayback" disablepictureinpicture preload="metadata" oncontextmenu="return false;" data-video-url="{{ movie.video_url }}" {% if movie.cover_url %}poster="{{ movie.cover_url }}"{% endif %}>
+      <video id="stream-player" class="player" playsinline controlsList="nodownload noremoteplayback" disablepictureinpicture preload="metadata" oncontextmenu="return false;" data-video-url="{{ movie.video_url }}" data-default-quality="{{ movie.video_default_quality }}" data-available-qualities="{{ movie.video_available_qualities }}" {% if movie.cover_url %}poster="{{ movie.cover_url }}"{% endif %}>
         {% if movie.video_url %}
           <source src="{{ movie.video_url }}">
         {% endif %}
@@ -166,7 +166,7 @@
             <span>K · J/L · M</span>
           </div>
           <div class="player-top-actions">
-            <select class="player-quality-select" data-quality-select aria-label="Calidad de video" hidden>
+            <select class="player-quality-select" data-quality-select aria-label="Calidad de video" title="Calidad de video">
               <option value="-1">Auto</option>
             </select>
             <button type="button" class="player-mini-action player-mini-action-volume" data-volume-toggle aria-label="Volumen">
@@ -345,18 +345,46 @@
     playerShell.classList.add('has-touch-input');
   }
 
+  // ---------------------------------------------------------------------
+  //  HLS quality selector
+  //  El <select data-quality-select> debe estar SIEMPRE visible.
+  //  Por defecto solo muestra "Auto"; cuando hls.js parsea el manifest y
+  //  hay multiples niveles, se rellena con 360p / 480p / 720p / etc.
+  //  El cambio manual usa hls.currentLevel.
+  // ---------------------------------------------------------------------
+  console.log('[player] hls.js disponible:', !!window.Hls, window.Hls && window.Hls.version ? `v${window.Hls.version}` : '');
+
   function initializeHlsPlayback() {
+    // Selector siempre visible (con "Auto" como minimo).
+    primeQualityControl('Auto');
+
     const sourceUrl = player.dataset.videoUrl || player.querySelector('source')?.getAttribute('src') || '';
-    if (!sourceUrl || !sourceUrl.toLowerCase().split('?')[0].endsWith('.m3u8')) {
+    if (!sourceUrl) {
+      console.warn('[player] No se encontro data-video-url ni <source>; el selector queda en Auto.');
       return;
     }
 
+    const isM3U8 = sourceUrl.toLowerCase().split('?')[0].endsWith('.m3u8');
+    if (!isM3U8) {
+      console.info('[player] Fuente no es .m3u8 (' + sourceUrl + '); HLS no aplica, selector queda en Auto.');
+      return;
+    }
+
+    // Safari / iOS reproducen HLS de forma nativa pero no exponen niveles
+    // a JS, asi que el selector se queda con "Auto" como unica opcion.
     if (player.canPlayType('application/vnd.apple.mpegurl')) {
+      console.info('[player] HLS nativo del navegador; los niveles no son seleccionables manualmente.');
       player.src = sourceUrl;
+      primeQualityControl('Auto');
       return;
     }
 
-    if (!window.Hls || !window.Hls.isSupported()) {
+    if (!window.Hls) {
+      console.error('[player] hls.js NO esta cargado (window.Hls indefinido). El selector se queda en Auto.');
+      return;
+    }
+    if (!window.Hls.isSupported()) {
+      console.warn('[player] hls.js no es compatible con este navegador. Selector en Auto.');
       return;
     }
 
@@ -368,13 +396,54 @@
     });
     hlsPlayer.loadSource(sourceUrl);
     hlsPlayer.attachMedia(player);
-    hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, function () {
-      console.log('HLS quality levels', hlsPlayer.levels);
-      hlsPlayer.currentLevel = -1;
+
+    hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, function (_event, data) {
+      const levels = hlsPlayer.levels || [];
+      console.log('[player] MANIFEST_PARSED - niveles detectados:', levels.length, levels.map((lvl, idx) => ({
+        index: idx,
+        label: qualityLabel(lvl),
+        height: lvl.height,
+        width: lvl.width,
+        bitrate: lvl.bitrate,
+      })));
+
+      if (levels.length === 0) {
+        console.warn('[player] El manifest no expuso ningun nivel; selector solo tendra Auto.');
+      } else if (levels.length === 1) {
+        console.warn('[player] El manifest tiene UN solo stream (no es multi-calidad). Re-genera el HLS con varias resoluciones para que el selector ofrezca opciones.');
+      }
+
+      // Aplicar la calidad por defecto subida por el admin (si existe).
+      // El usuario puede subirla o bajarla con el selector.
+      const defaultQuality = (player.dataset.defaultQuality || '').trim();
+      let appliedLevel = -1; // Auto
+      if (defaultQuality && levels.length > 1) {
+        const matchIndex = levels.findIndex((lvl) => qualityLabel(lvl) === defaultQuality);
+        if (matchIndex >= 0) {
+          appliedLevel = matchIndex;
+          console.log('[player] Calidad por defecto aplicada:', defaultQuality, '(indice', matchIndex + ')');
+        } else {
+          console.info('[player] Calidad por defecto', defaultQuality, 'no encontrada en niveles; arranca en Auto.');
+        }
+      }
+      hlsPlayer.currentLevel = appliedLevel;
       renderQualityOptions();
+      if (appliedLevel >= 0) {
+        // Reflejar en el <select> aunque el evento LEVEL_SWITCHED tarde un poco.
+        if (qualitySelect) qualitySelect.value = String(appliedLevel);
+      }
     });
-    hlsPlayer.on(window.Hls.Events.LEVEL_SWITCHED, function (event, data) {
+
+    hlsPlayer.on(window.Hls.Events.LEVEL_SWITCHED, function (_event, data) {
+      const level = (hlsPlayer.levels || [])[data.level];
+      console.log('[player] LEVEL_SWITCHED -> indice:', data.level, level ? qualityLabel(level) : '(desconocido)', 'auto:', hlsPlayer.autoLevelEnabled);
       syncQualitySelect(data.level);
+    });
+
+    hlsPlayer.on(window.Hls.Events.ERROR, function (_event, data) {
+      if (data && data.fatal) {
+        console.error('[player] HLS error fatal:', data.type, data.details, data);
+      }
     });
   }
 
@@ -385,20 +454,53 @@
     return 'Calidad';
   }
 
+  // Asegura que el selector NUNCA quede oculto (ni por hidden ni por display:none).
+  function ensureQualitySelectVisible() {
+    if (!qualitySelect) return;
+    qualitySelect.hidden = false;
+    qualitySelect.removeAttribute('hidden');
+    if (qualitySelect.style.display === 'none') {
+      qualitySelect.style.display = '';
+    }
+  }
+
+  function primeQualityControl(label) {
+    if (!qualitySelect) return;
+    qualitySelect.innerHTML = '';
+    const option = document.createElement('option');
+    option.value = '-1';
+    option.textContent = label || 'Auto';
+    qualitySelect.appendChild(option);
+    qualitySelect.value = '-1';
+    // Mientras solo este "Auto", el control no es interactivo, pero sigue visible.
+    qualitySelect.disabled = true;
+    ensureQualitySelectVisible();
+  }
+
   function renderQualityOptions() {
-    if (!qualitySelect || !hlsPlayer || !hlsPlayer.levels || !hlsPlayer.levels.length) return;
+    if (!qualitySelect || !hlsPlayer) return;
+    const levels = hlsPlayer.levels || [];
     const currentValue = qualitySelect.value || '-1';
-    qualitySelect.innerHTML = '<option value="-1">Auto</option>';
-    hlsPlayer.levels.forEach((level, index) => {
+
+    qualitySelect.innerHTML = '';
+    const autoOption = document.createElement('option');
+    autoOption.value = '-1';
+    autoOption.textContent = 'Auto';
+    qualitySelect.appendChild(autoOption);
+
+    levels.forEach((level, index) => {
       const option = document.createElement('option');
       option.value = String(index);
       option.textContent = qualityLabel(level);
       qualitySelect.appendChild(option);
     });
+
     qualitySelect.value = Array.from(qualitySelect.options).some((option) => option.value === currentValue)
       ? currentValue
       : '-1';
-    qualitySelect.hidden = false;
+    // Habilitar siempre que haya al menos un nivel real (>=1).
+    qualitySelect.disabled = levels.length < 1;
+    ensureQualitySelectVisible();
   }
 
   function syncQualitySelect(activeLevel) {
@@ -411,16 +513,24 @@
   }
 
   function setManualQuality(value) {
-    if (!hlsPlayer) return;
+    if (!hlsPlayer) {
+      console.warn('[player] setManualQuality: hls.js no inicializado, no se puede cambiar calidad.');
+      return;
+    }
     const nextLevel = Number(value);
     if (nextLevel < 0) {
       hlsPlayer.currentLevel = -1;
+      console.log('[player] Calidad manual -> AUTO');
       showHud('Calidad Auto');
       return;
     }
-    if (!hlsPlayer.levels || !hlsPlayer.levels[nextLevel]) return;
+    if (!hlsPlayer.levels || !hlsPlayer.levels[nextLevel]) {
+      console.warn('[player] setManualQuality: indice de nivel invalido:', nextLevel);
+      return;
+    }
     hlsPlayer.currentLevel = nextLevel;
     const level = hlsPlayer.levels[nextLevel];
+    console.log('[player] Calidad manual -> indice', nextLevel, qualityLabel(level));
     showHud(`Calidad ${qualityLabel(level)}`);
   }
 

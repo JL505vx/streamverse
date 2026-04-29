@@ -55,6 +55,32 @@
       <dt>Tiempo</dt>
       <dd data-processing-elapsed>{{ elapsed_label }}</dd>
     </div>
+    <div>
+      <dt>Calidad nativa</dt>
+      <dd data-processing-native-quality>
+        {% if movie.video_quality_native_label %}
+          {{ movie.video_quality_native_label }}{% if movie.video_original_width and movie.video_original_height %} ({{ movie.video_original_width }}x{{ movie.video_original_height }}){% endif %}
+        {% else %}
+          --
+        {% endif %}
+      </dd>
+    </div>
+    <div>
+      <dt>Calidades HLS</dt>
+      <dd data-processing-available-qualities>
+        {% if movie.video_available_qualities_list %}
+          {{ movie.video_available_qualities_list|join:" / " }}
+        {% else %}
+          --
+        {% endif %}
+      </dd>
+    </div>
+    <div>
+      <dt>Por defecto</dt>
+      <dd data-processing-default-quality>
+        {% if movie.video_default_quality %}{{ movie.video_default_quality }}{% else %}Auto{% endif %}
+      </dd>
+    </div>
   </dl>
 
   <ol class="processing-timeline" data-processing-timeline>
@@ -93,6 +119,9 @@
     const elapsedEl = root.querySelector('[data-processing-elapsed]');
     const errorBox = root.querySelector('[data-processing-error]');
     const errorText = root.querySelector('[data-processing-error-text]');
+    const nativeQualityEl = root.querySelector('[data-processing-native-quality]');
+    const availableQualitiesEl = root.querySelector('[data-processing-available-qualities]');
+    const defaultQualityEl = root.querySelector('[data-processing-default-quality]');
     const steps = Array.from(root.querySelectorAll('[data-stage]'));
 
     const formatDate = (value) => {
@@ -168,6 +197,24 @@
         const hasError = Boolean(data.error);
         errorBox.hidden = !hasError;
         errorText.textContent = data.error || '';
+      }
+
+      if (nativeQualityEl) {
+        const native = data.video_native_quality || '';
+        const w = data.video_original_width || 0;
+        const h = data.video_original_height || 0;
+        if (native) {
+          nativeQualityEl.textContent = (w && h) ? `${native} (${w}x${h})` : native;
+        } else {
+          nativeQualityEl.textContent = '--';
+        }
+      }
+      if (availableQualitiesEl) {
+        const list = Array.isArray(data.video_available_qualities) ? data.video_available_qualities : [];
+        availableQualitiesEl.textContent = list.length ? list.join(' / ') : '--';
+      }
+      if (defaultQualityEl) {
+        defaultQualityEl.textContent = data.video_default_quality || 'Auto';
       }
     };
 
