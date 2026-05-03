@@ -370,21 +370,18 @@
       return;
     }
 
-    // Safari / iOS reproducen HLS de forma nativa pero no exponen niveles
-    // a JS, asi que el selector se queda con "Auto" como unica opcion.
-    if (player.canPlayType('application/vnd.apple.mpegurl')) {
-      console.info('[player] HLS nativo del navegador; los niveles no son seleccionables manualmente.');
-      player.src = sourceUrl;
-      primeQualityControl('Auto');
-      return;
-    }
-
     if (!window.Hls) {
-      console.error('[player] hls.js NO esta cargado (window.Hls indefinido). El selector se queda en Auto.');
+      console.error('[player] hls.js NO esta cargado (window.Hls indefinido). Se usa fallback nativo si el navegador lo soporta.');
+      if (player.canPlayType('application/vnd.apple.mpegurl')) {
+        player.src = sourceUrl;
+      }
       return;
     }
     if (!window.Hls.isSupported()) {
-      console.warn('[player] hls.js no es compatible con este navegador. Selector en Auto.');
+      console.warn('[player] hls.js no es compatible con este navegador. Se usa fallback nativo si el navegador lo soporta.');
+      if (player.canPlayType('application/vnd.apple.mpegurl')) {
+        player.src = sourceUrl;
+      }
       return;
     }
 
