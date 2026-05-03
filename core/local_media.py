@@ -25,8 +25,14 @@ PROCESSING_STAGES = {
     'hls_360p': 60,
     'hls_480p': 75,
     'hls_720p': 90,
+    'thumbnails': 95,
     'finalizado': 100,
 }
+
+THUMBNAIL_WIDTH = 160
+THUMBNAIL_HEIGHT = 90
+THUMBNAIL_COLUMNS = 5
+THUMBNAIL_INTERVAL_SECONDS = 5
 
 HLS_RENDITIONS = [
     {
@@ -112,6 +118,24 @@ def _probe_video_resolution(video_path):
         return (0, 0)
 
 
+def _probe_video_duration(video_path):
+    command = [
+        _ffprobe_binary(),
+        '-v', 'error',
+        '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1',
+        str(video_path),
+    ]
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        return max(0.0, float((result.stdout or '').strip() or 0))
+    except FileNotFoundError:
+        logger.info('ffprobe no disponible; no se puede detectar duracion path=%s', video_path)
+    except (subprocess.CalledProcessError, ValueError) as exc:
+        logger.error('ffprobe fallo detectando duracion path=%s error=%s', video_path, exc)
+    return 0.0
+
+
 def _safe_filename(filename: str, fallback: str = 'video') -> str:
     source = Path(filename or fallback)
     stem = slugify(source.stem) or fallback
@@ -146,6 +170,12 @@ def get_local_hls_dir() -> Path:
     hls_dir = get_local_videos_dir() / 'hls'
     hls_dir.mkdir(parents=True, exist_ok=True)
     return hls_dir
+
+
+def get_local_thumbnails_dir() -> Path:
+    thumbnails_dir = Path(settings.MEDIA_ROOT) / 'thumbnails'
+    thumbnails_dir.mkdir(parents=True, exist_ok=True)
+    return thumbnails_dir
 
 
 def _build_local_video_destination(filename: str):
@@ -248,6 +278,23 @@ def _build_hls_output(movie_id=None):
     playlist_path = output_dir / 'master.m3u8'
     playlist_url = _public_url_for_media_path(playlist_path)
     return output_dir, playlist_path, playlist_url
+
+
+def _build_thumbnail_output(movie_id=None):
+    folder_name = str(movie_id) if movie_id else uuid4().hex
+    output_dir = get_local_thumbnails_dir() / folder_name
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    sprite_path = output_dir / 'sprite.jpg'
+    vtt_path = output_dir / 'preview.vtt'
+    return {
+        'output_dir': output_dir,
+        'sprite_path': sprite_path,
+        'vtt_path': vtt_path,
+        'sprite_url': _public_url_for_media_path(sprite_path),
+        'vtt_url': _public_url_for_media_path(vtt_path),
+    }
 
 
 def _update_movie_processing_state(
@@ -451,7 +498,107 @@ def _generate_hls_playlist(video_path, movie_id=None, renditions=None):
     return {'playlist_url': playlist_url, 'renditions': renditions}
 
 
-def _mark_movie_hls_ready(movie_id, playlist_url: str, renditions=None, original_size=None):
+def _format_vtt_timestamp(seconds):
+    milliseconds = int(round(max(0.0, float(seconds or 0)) * 1000))
+    hours, remainder = divmod(milliseconds, 3600 * 1000)
+    minutes, remainder = divmod(remainder, 60 * 1000)
+    secs, millis = divmod(remainder, 1000)
+    return f'{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}'
+
+
+def _write_thumbnail_vtt(vtt_path, *, sprite_filename, duration, interval, total_thumbnails):
+    lines = ['WEBVTT', '']
+    safe_duration = max(float(duration or 0), float(interval or THUMBNAIL_INTERVAL_SECONDS))
+    for index in range(total_thumbnails):
+        start = index * interval
+        end = min(start + interval, safe_duration)
+        if end <= start:
+            end = start + interval
+        column = index % THUMBNAIL_COLUMNS
+        row = index // THUMBNAIL_COLUMNS
+        x = column * THUMBNAIL_WIDTH
+        y = row * THUMBNAIL_HEIGHT
+        lines.append(f'{_format_vtt_timestamp(start)} --> {_format_vtt_timestamp(end)}')
+        lines.append(f'{sprite_filename}#xywh={x},{y},{THUMBNAIL_WIDTH},{THUMBNAIL_HEIGHT}')
+        lines.append('')
+    vtt_path.write_text('\n'.join(lines), encoding='utf-8')
+
+
+def _generate_thumbnail_previews(video_path, movie_id=None, interval=THUMBNAIL_INTERVAL_SECONDS):
+    interval = max(int(interval or THUMBNAIL_INTERVAL_SECONDS), 1)
+    _update_movie_processing_state(movie_id, step='generando thumbnails', stage='thumbnails')
+    output = _build_thumbnail_output(movie_id=movie_id)
+    duration = _probe_video_duration(video_path)
+    total_thumbnails = max(1, int((duration + interval - 0.001) // interval) if duration else 1)
+    rows = max(1, (total_thumbnails + THUMBNAIL_COLUMNS - 1) // THUMBNAIL_COLUMNS)
+    tile_filter = (
+        f'fps=1/{interval},'
+        f'scale={THUMBNAIL_WIDTH}:{THUMBNAIL_HEIGHT}:force_original_aspect_ratio=decrease,'
+        f'pad={THUMBNAIL_WIDTH}:{THUMBNAIL_HEIGHT}:(ow-iw)/2:(oh-ih)/2,'
+        f'tile={THUMBNAIL_COLUMNS}x{rows}'
+    )
+    command = [
+        _ffmpeg_binary(),
+        '-y', '-nostdin', '-hide_banner',
+        '-loglevel', 'error',
+        '-i', str(video_path),
+        '-an',
+        '-vf', tile_filter,
+        '-frames:v', '1',
+        '-q:v', '4',
+        str(output['sprite_path']),
+    ]
+
+    logger.info(
+        'Generando thumbnails movie_id=%s input=%s sprite=%s interval=%ss total=%s grid=%sx%s',
+        movie_id, video_path, output['sprite_path'], interval, total_thumbnails, THUMBNAIL_COLUMNS, rows,
+    )
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+    except FileNotFoundError:
+        shutil.rmtree(output['output_dir'], ignore_errors=True)
+        logger.error('ffmpeg no esta disponible; no se pudieron generar thumbnails movie_id=%s input=%s', movie_id, video_path)
+        return None
+    except subprocess.CalledProcessError as exc:
+        shutil.rmtree(output['output_dir'], ignore_errors=True)
+        logger.error(
+            'ffmpeg fallo generando thumbnails movie_id=%s input=%s stderr=%s',
+            movie_id, video_path, (exc.stderr or '').strip(), exc_info=True,
+        )
+        return None
+
+    if not output['sprite_path'].exists() or output['sprite_path'].stat().st_size <= 0:
+        shutil.rmtree(output['output_dir'], ignore_errors=True)
+        logger.error(
+            'Sprite de thumbnails incompleto movie_id=%s sprite=%s stdout=%s stderr=%s',
+            movie_id, output['sprite_path'], (result.stdout or '').strip(), (result.stderr or '').strip(),
+        )
+        return None
+
+    _write_thumbnail_vtt(
+        output['vtt_path'],
+        sprite_filename=output['sprite_path'].name,
+        duration=duration,
+        interval=interval,
+        total_thumbnails=total_thumbnails,
+    )
+    if not output['vtt_path'].exists() or output['vtt_path'].stat().st_size <= 0:
+        shutil.rmtree(output['output_dir'], ignore_errors=True)
+        logger.error('VTT de thumbnails incompleto movie_id=%s vtt=%s', movie_id, output['vtt_path'])
+        return None
+
+    logger.info(
+        'Thumbnails generados movie_id=%s sprite_url=%s vtt_url=%s',
+        movie_id, output['sprite_url'], output['vtt_url'],
+    )
+    return {
+        'sprite_url': output['sprite_url'],
+        'vtt_url': output['vtt_url'],
+        'interval': interval,
+    }
+
+
+def _mark_movie_hls_ready(movie_id, playlist_url: str, renditions=None, original_size=None, thumbnails=None):
     """Marca la pelicula como lista y guarda metadata HLS (calidades, original)."""
     if not movie_id:
         return
@@ -476,6 +623,10 @@ def _mark_movie_hls_ready(movie_id, playlist_url: str, renditions=None, original
             updates['video_original_width'] = int(width)
         if height:
             updates['video_original_height'] = int(height)
+    if thumbnails:
+        updates['thumbnail_sprite'] = thumbnails.get('sprite_url', '')
+        updates['thumbnail_vtt'] = thumbnails.get('vtt_url', '')
+        updates['thumbnail_interval'] = int(thumbnails.get('interval') or THUMBNAIL_INTERVAL_SECONDS)
     Movie.objects.filter(pk=movie_id).update(**updates)
 
 
@@ -540,9 +691,23 @@ def procesar_video_background(public_url: str, movie_id=None) -> None:
 
         playlist_url = result['playlist_url']
         used_renditions = result['renditions']
+        thumbnails = _generate_thumbnail_previews(
+            video_path,
+            movie_id=movie_id,
+            interval=THUMBNAIL_INTERVAL_SECONDS,
+        )
+        if not thumbnails:
+            _update_movie_processing_state(
+                movie_id, status='error', step='error', stage='error',
+                progress=0, finished_at=timezone.now(),
+                error_message='No se pudieron generar thumbnails para el video.',
+            )
+            return
+
         _mark_movie_hls_ready(
             movie_id, playlist_url,
             renditions=used_renditions, original_size=original_size,
+            thumbnails=thumbnails,
         )
         if video_path.exists() and resolve_local_media_path(playlist_url) != video_path:
             video_path.unlink(missing_ok=True)
@@ -613,3 +778,12 @@ def delete_local_video(public_url: str) -> None:
             shutil.rmtree(parent_dir, ignore_errors=True)
             return
     file_path.unlink()
+
+
+def delete_local_thumbnails(movie_or_id) -> None:
+    movie_id = getattr(movie_or_id, 'pk', movie_or_id)
+    if not movie_id:
+        return
+    thumbnails_dir = get_local_thumbnails_dir() / str(movie_id)
+    if thumbnails_dir.exists():
+        shutil.rmtree(thumbnails_dir, ignore_errors=True)

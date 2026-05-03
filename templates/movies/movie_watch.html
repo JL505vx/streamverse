@@ -134,7 +134,7 @@
     </section>
 
     <div class="player-frame" data-player-shell>
-      <video id="stream-player" class="player" playsinline controlsList="nodownload noremoteplayback" disablepictureinpicture preload="metadata" oncontextmenu="return false;" data-video-url="{{ movie.video_url }}" data-default-quality="{{ movie.video_default_quality }}" data-available-qualities="{{ movie.video_available_qualities }}" {% if movie.cover_url %}poster="{{ movie.cover_url }}"{% endif %}>
+      <video id="stream-player" class="player" playsinline controlsList="nodownload noremoteplayback" disablepictureinpicture preload="metadata" oncontextmenu="return false;" data-video-url="{{ movie.video_url }}" data-default-quality="{{ movie.video_default_quality }}" data-available-qualities="{{ movie.video_available_qualities }}" data-thumbnail-vtt="{{ movie.thumbnail_vtt }}" data-thumbnail-sprite="{{ movie.thumbnail_sprite }}" data-thumbnail-interval="{{ movie.thumbnail_interval }}" {% if movie.cover_url %}poster="{{ movie.cover_url }}"{% endif %}>
         {% if movie.video_url %}
           <source src="{{ movie.video_url }}">
         {% endif %}
@@ -200,6 +200,10 @@
             <span data-current-time>0:00</span>
             <span data-duration>0:00</span>
           </div>
+          <div class="player-thumbnail-preview" data-thumbnail-preview hidden>
+            <div class="player-thumbnail-image" data-thumbnail-image aria-hidden="true"></div>
+            <span data-thumbnail-time>0:00</span>
+          </div>
           <input type="range" min="0" max="0" value="0" step="1" class="player-seek" data-seek aria-label="Mover reproduccion">
         </div>
       </div>
@@ -254,6 +258,9 @@
   const togglePlayBtn = document.querySelector('[data-toggle-play]');
   const togglePlayText = document.querySelector('[data-toggle-play-text]');
   const seekInput = document.querySelector('[data-seek]');
+  const thumbnailPreview = document.querySelector('[data-thumbnail-preview]');
+  const thumbnailImage = document.querySelector('[data-thumbnail-image]');
+  const thumbnailTimeLabel = document.querySelector('[data-thumbnail-time]');
   const currentTimeLabel = document.querySelector('[data-current-time]');
   const durationLabel = document.querySelector('[data-duration]');
   const jumpButtons = document.querySelectorAll('[data-jump]');
@@ -325,6 +332,8 @@
   let partySocketHeartbeatTimer = null;
   let partySocketReconnectAttempts = 0;
   let hlsPlayer = null;
+  let thumbnailCues = [];
+  let thumbnailTrackReady = false;
 
   const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
   const playerSettingsKey = 'streamverse-player-settings-v2';
@@ -563,6 +572,112 @@
       return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     }
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  function parseVttTimestamp(value) {
+    const parts = String(value || '').trim().split(':');
+    if (parts.length < 2) return 0;
+    const secondsPart = parts.pop();
+    const seconds = Number(secondsPart || 0);
+    const minutes = Number(parts.pop() || 0);
+    const hours = Number(parts.pop() || 0);
+    return (hours * 3600) + (minutes * 60) + seconds;
+  }
+
+  function resolveThumbnailUrl(rawUrl, vttUrl) {
+    try {
+      return new URL(rawUrl, new URL(vttUrl, window.location.href)).toString();
+    } catch (error) {
+      return rawUrl;
+    }
+  }
+
+  function parseThumbnailVtt(text, vttUrl) {
+    const lines = String(text || '').split(/\r?\n/);
+    const cues = [];
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index].trim();
+      if (!line.includes('-->')) continue;
+      const [startRaw, endRaw] = line.split('-->').map((item) => item.trim());
+      const imageLine = (lines[index + 1] || '').trim();
+      const match = imageLine.match(/^(.+?)#xywh=(\d+),(\d+),(\d+),(\d+)$/);
+      if (!match) continue;
+      cues.push({
+        start: parseVttTimestamp(startRaw),
+        end: parseVttTimestamp(endRaw),
+        imageUrl: resolveThumbnailUrl(match[1], vttUrl),
+        x: Number(match[2]),
+        y: Number(match[3]),
+        width: Number(match[4]),
+        height: Number(match[5]),
+      });
+    }
+    return cues;
+  }
+
+  async function loadThumbnailTrack() {
+    const vttUrl = (player.dataset.thumbnailVtt || '').trim();
+    if (!vttUrl || !thumbnailPreview || !thumbnailImage) return;
+    try {
+      const response = await fetch(vttUrl, { credentials: 'same-origin' });
+      if (!response.ok) {
+        console.warn('[player] No se pudo cargar preview.vtt', response.status);
+        return;
+      }
+      thumbnailCues = parseThumbnailVtt(await response.text(), vttUrl);
+      thumbnailTrackReady = thumbnailCues.length > 0;
+      console.log('[player] Thumbnail cues cargados:', thumbnailCues.length);
+    } catch (error) {
+      console.warn('[player] Error cargando thumbnails', error);
+    }
+  }
+
+  function findThumbnailCue(seconds) {
+    if (!thumbnailTrackReady) return null;
+    return thumbnailCues.find((cue) => seconds >= cue.start && seconds < cue.end) || thumbnailCues[thumbnailCues.length - 1] || null;
+  }
+
+  function previewTimeFromPointer(event) {
+    if (!seekInput) return 0;
+    const rect = seekInput.getBoundingClientRect();
+    const clientX = event.touches && event.touches[0] ? event.touches[0].clientX : event.clientX;
+    const ratio = rect.width > 0 ? Math.min(1, Math.max(0, (clientX - rect.left) / rect.width)) : 0;
+    const duration = Number.isFinite(player.duration) ? player.duration : Number(seekInput.max || 0);
+    return Math.max(0, ratio * Math.max(duration || 0, 0));
+  }
+
+  function renderThumbnailPreview(seconds, clientX) {
+    if (!thumbnailPreview || !thumbnailImage || !thumbnailTimeLabel || !seekInput) return;
+    const cue = findThumbnailCue(seconds);
+    if (!cue) return;
+    thumbnailImage.style.width = `${cue.width}px`;
+    thumbnailImage.style.height = `${cue.height}px`;
+    thumbnailImage.style.backgroundImage = `url("${cue.imageUrl}")`;
+    thumbnailImage.style.backgroundPosition = `-${cue.x}px -${cue.y}px`;
+    thumbnailTimeLabel.textContent = formatTime(seconds);
+
+    const seekRect = seekInput.getBoundingClientRect();
+    const shellRect = (playerShell || document.body).getBoundingClientRect();
+    const centerX = typeof clientX === 'number'
+      ? clientX - shellRect.left
+      : seekRect.left - shellRect.left + seekRect.width / 2;
+    const minX = cue.width / 2 + 12;
+    const maxX = Math.max(minX, shellRect.width - cue.width / 2 - 12);
+    thumbnailPreview.style.left = `${Math.min(maxX, Math.max(minX, centerX))}px`;
+    thumbnailPreview.hidden = false;
+  }
+
+  function updateThumbnailFromEvent(event) {
+    if (!thumbnailTrackReady) return;
+    const seconds = previewTimeFromPointer(event);
+    const point = event.touches && event.touches[0] ? event.touches[0].clientX : event.clientX;
+    renderThumbnailPreview(seconds, point);
+  }
+
+  function hideThumbnailPreview() {
+    if (thumbnailPreview) {
+      thumbnailPreview.hidden = true;
+    }
   }
 
   function persistPlayerSettings() {
@@ -1678,8 +1793,15 @@
       if (Number.isFinite(nextTime)) {
         player.currentTime = nextTime;
         syncControls();
+        renderThumbnailPreview(nextTime);
       }
     });
+    seekInput.addEventListener('pointerenter', updateThumbnailFromEvent);
+    seekInput.addEventListener('pointermove', updateThumbnailFromEvent);
+    seekInput.addEventListener('pointerleave', hideThumbnailPreview);
+    seekInput.addEventListener('touchstart', updateThumbnailFromEvent, { passive: true });
+    seekInput.addEventListener('touchmove', updateThumbnailFromEvent, { passive: true });
+    seekInput.addEventListener('touchend', hideThumbnailPreview, { passive: true });
   }
 
   if (watchPartyCreateBtn) {
@@ -1944,6 +2066,7 @@
   syncMeters();
   syncImmersiveState();
   syncControls();
+  loadThumbnailTrack();
   renderWatchPartyPanel();
   if (watchPartyCodeInput && bootstrappedPartyCode) {
     watchPartyCodeInput.value = bootstrappedPartyCode;

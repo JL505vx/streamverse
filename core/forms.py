@@ -11,6 +11,7 @@ from movies.models import Genre, Movie
 
 from .local_media import (
     PROCESSING_STAGES,
+    delete_local_thumbnails,
     delete_local_video,
     get_local_video_max_bytes,
     save_uploaded_video_locally,
@@ -96,6 +97,9 @@ def _mark_video_received(movie):
     movie.processing_started_at = None
     movie.processing_finished_at = None
     movie.error_message = ''
+    movie.thumbnail_sprite = ''
+    movie.thumbnail_vtt = ''
+    movie.thumbnail_interval = 5
 
 
 def _mark_video_ready(movie):
@@ -105,6 +109,9 @@ def _mark_video_ready(movie):
     movie.processing_progress = PROCESSING_STAGES['finalizado']
     movie.processing_finished_at = timezone.now()
     movie.error_message = ''
+    movie.thumbnail_sprite = ''
+    movie.thumbnail_vtt = ''
+    movie.thumbnail_interval = 5
 
 
 def _mark_video_empty(movie):
@@ -115,6 +122,9 @@ def _mark_video_empty(movie):
     movie.processing_started_at = None
     movie.processing_finished_at = None
     movie.error_message = ''
+    movie.thumbnail_sprite = ''
+    movie.thumbnail_vtt = ''
+    movie.thumbnail_interval = 5
 
 
 class StyledAuthenticationForm(AuthenticationForm):
@@ -496,6 +506,7 @@ class MovieMediaForm(forms.ModelForm):
 
         if self.cleaned_data.get('remove_video_file'):
             delete_local_video(movie.video_url)
+            delete_local_thumbnails(movie)
             delete_public_file(movie.video_url)
             movie.video_url = ''
             _clear_video_upload_metadata(movie)

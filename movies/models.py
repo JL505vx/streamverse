@@ -63,6 +63,9 @@ class Movie(models.Model):
     # Calidad por defecto en la que arranca el reproductor (ej. "720p").
     # Vacio = el player arranca en Auto (videos antiguos).
     video_default_quality = models.CharField(max_length=12, blank=True, default='')
+    thumbnail_sprite = models.CharField(max_length=200, blank=True, default='')
+    thumbnail_vtt = models.CharField(max_length=200, blank=True, default='')
+    thumbnail_interval = models.PositiveIntegerField(default=5)
     is_published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

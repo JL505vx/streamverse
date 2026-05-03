@@ -49,7 +49,13 @@ from .models import (
     UserProfile,
 )
 from .session_scopes import resolve_auth_scope
-from .local_media import PROCESSING_STAGES, append_chunk_to_upload, delete_local_video, finalize_chunk_upload
+from .local_media import (
+    PROCESSING_STAGES,
+    append_chunk_to_upload,
+    delete_local_thumbnails,
+    delete_local_video,
+    finalize_chunk_upload,
+)
 from .supabase_storage import delete_public_file
 
 
@@ -175,6 +181,7 @@ def media_stream_view(request, path):
     hls_content_types = {
         '.m3u8': 'application/vnd.apple.mpegurl',
         '.ts': 'video/mp2t',
+        '.vtt': 'text/vtt',
     }
     content_type = hls_content_types.get(suffix) or mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
     range_header = request.headers.get('Range', '')
@@ -279,6 +286,9 @@ def video_processing_status_view(request, pk):
             'started_at': movie.processing_started_at.isoformat() if movie.processing_started_at else None,
             'finished_at': movie.processing_finished_at.isoformat() if movie.processing_finished_at else None,
             'error': movie.error_message or '',
+            'thumbnail_sprite': movie.thumbnail_sprite or '',
+            'thumbnail_vtt': movie.thumbnail_vtt or '',
+            'thumbnail_interval': movie.thumbnail_interval,
             'message': (
                 f'{movie.get_status_display()} - {movie.processing_step}'
                 if movie.processing_step
@@ -301,6 +311,7 @@ def _build_processing_timeline(movie):
         'hls_360p': 'HLS 360p',
         'hls_480p': 'HLS 480p',
         'hls_720p': 'HLS 720p',
+        'thumbnails': 'Thumbnails',
         'finalizado': 'Finalizado',
     }
     current_progress = int(movie.processing_progress or 0)
@@ -1183,6 +1194,7 @@ def admin_movie_delete_view(request, pk):
     if request.method == 'POST':
         delete_public_file(movie.cover_url)
         delete_local_video(movie.video_url)
+        delete_local_thumbnails(movie)
         delete_public_file(movie.video_url)
         movie.delete()
         messages.success(request, 'Contenido eliminado.')
