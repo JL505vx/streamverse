@@ -32,7 +32,7 @@ PROCESSING_STAGES = {
 THUMBNAIL_WIDTH = 160
 THUMBNAIL_HEIGHT = 90
 THUMBNAIL_COLUMNS = 5
-THUMBNAIL_INTERVAL_SECONDS = 5
+THUMBNAIL_INTERVAL_SECONDS = 10
 
 HLS_RENDITIONS = [
     {
@@ -40,30 +40,30 @@ HLS_RENDITIONS = [
         'label': '360p',
         'width': 640,
         'height': 360,
-        'bitrate': '800k',
-        'maxrate': '900k',
-        'bufsize': '1200k',
-        'bandwidth': 1000000,
+        'bitrate': '600k',
+        'maxrate': '700k',
+        'bufsize': '1000k',
+        'bandwidth': 800000,
     },
     {
         'stage': 'hls_480p',
         'label': '480p',
         'width': 854,
         'height': 480,
-        'bitrate': '1400k',
-        'maxrate': '1600k',
-        'bufsize': '2100k',
-        'bandwidth': 1700000,
+        'bitrate': '1000k',
+        'maxrate': '1200k',
+        'bufsize': '1500k',
+        'bandwidth': 1300000,
     },
     {
         'stage': 'hls_720p',
         'label': '720p',
         'width': 1280,
         'height': 720,
-        'bitrate': '2800k',
-        'maxrate': '3100k',
-        'bufsize': '4200k',
-        'bandwidth': 3300000,
+        'bitrate': '2500k',
+        'maxrate': '2800k',
+        'bufsize': '4000k',
+        'bandwidth': 3000000,
     },
 ]
 
@@ -74,6 +74,26 @@ def _ffmpeg_binary() -> str:
 
 def _ffprobe_binary() -> str:
     return os.getenv('FFPROBE_BINARY', 'ffprobe').strip() or 'ffprobe'
+
+
+def _ffmpeg_preset() -> str:
+    return os.getenv('FFMPEG_HLS_PRESET', 'superfast').strip() or 'superfast'
+
+
+def _ffmpeg_crf() -> str:
+    return os.getenv('FFMPEG_HLS_CRF', '23').strip() or '23'
+
+
+def _ffmpeg_threads() -> str:
+    return os.getenv('FFMPEG_THREADS', '0').strip() or '0'
+
+
+def _ffmpeg_audio_bitrate() -> str:
+    return os.getenv('FFMPEG_HLS_AUDIO_BITRATE', '128k').strip() or '128k'
+
+
+def _ffmpeg_hls_time() -> str:
+    return os.getenv('FFMPEG_HLS_TIME', '5').strip() or '5'
 
 
 def _select_renditions_for_height(original_height: int):
@@ -264,6 +284,107 @@ def _count_audio_streams(video_path):
     return len([line for line in result.stdout.splitlines() if line.strip()])
 
 
+def _build_mp4_transcode_command(input_path, output_path):
+    return [
+        _ffmpeg_binary(),
+        '-y', '-nostdin', '-hide_banner',
+        '-loglevel', 'error',
+        '-threads', _ffmpeg_threads(),
+        '-i', str(input_path),
+        '-map', '0:v:0',
+        '-map', '0:a?',
+        '-c:v', 'libx264',
+        '-preset', _ffmpeg_preset(),
+        '-crf', _ffmpeg_crf(),
+        '-profile:v', 'main',
+        '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac',
+        '-b:a', _ffmpeg_audio_bitrate(),
+        '-ac', '2',
+        '-movflags', '+faststart',
+        str(output_path),
+    ]
+
+
+def _build_hls_filter_complex(renditions):
+    if len(renditions) == 1:
+        rendition = renditions[0]
+        return (
+            f'[0:v]scale=w={rendition["width"]}:h={rendition["height"]}:force_original_aspect_ratio=decrease,'
+            f'pad={rendition["width"]}:{rendition["height"]}:(ow-iw)/2:(oh-ih)/2,'
+            'setsar=1[v0]'
+        )
+
+    split_outputs = ''.join(f'[v{i}in]' for i, _ in enumerate(renditions))
+    filters = [f'[0:v]split={len(renditions)}{split_outputs}']
+    for index, rendition in enumerate(renditions):
+        filters.append(
+            f'[v{index}in]'
+            f'scale=w={rendition["width"]}:h={rendition["height"]}:force_original_aspect_ratio=decrease,'
+            f'pad={rendition["width"]}:{rendition["height"]}:(ow-iw)/2:(oh-ih)/2,'
+            'setsar=1'
+            f'[v{index}]'
+        )
+    return ';'.join(filters)
+
+
+def _build_multibitrate_hls_command(video_path, output_dir, renditions, has_audio=True):
+    command = [
+        _ffmpeg_binary(),
+        '-y', '-nostdin', '-hide_banner',
+        '-loglevel', 'error',
+        '-threads', _ffmpeg_threads(),
+        '-i', str(video_path),
+        '-filter_complex', _build_hls_filter_complex(renditions),
+    ]
+
+    for index, _rendition in enumerate(renditions):
+        command.extend(['-map', f'[v{index}]'])
+        if has_audio:
+            command.extend(['-map', '0:a:0'])
+
+    for index, rendition in enumerate(renditions):
+        command.extend([
+            f'-c:v:{index}', 'libx264',
+            f'-preset:v:{index}', _ffmpeg_preset(),
+            f'-crf:v:{index}', _ffmpeg_crf(),
+            f'-profile:v:{index}', 'main',
+            f'-pix_fmt:v:{index}', 'yuv420p',
+            f'-b:v:{index}', rendition['bitrate'],
+            f'-maxrate:v:{index}', rendition['maxrate'],
+            f'-bufsize:v:{index}', rendition['bufsize'],
+            f'-g:v:{index}', '120',
+            f'-keyint_min:v:{index}', '120',
+            f'-sc_threshold:v:{index}', '0',
+        ])
+
+    if has_audio:
+        for index, _rendition in enumerate(renditions):
+            command.extend([
+                f'-c:a:{index}', 'aac',
+                f'-b:a:{index}', _ffmpeg_audio_bitrate(),
+                f'-ac:a:{index}', '2',
+            ])
+
+    variant_map = []
+    for index, rendition in enumerate(renditions):
+        if has_audio:
+            variant_map.append(f'v:{index},a:{index},name:{rendition["label"]}')
+        else:
+            variant_map.append(f'v:{index},name:{rendition["label"]}')
+
+    command.extend([
+        '-f', 'hls',
+        '-hls_time', _ffmpeg_hls_time(),
+        '-hls_playlist_type', 'vod',
+        '-hls_segment_filename', str(output_dir / '%v' / 'segment_%03d.ts'),
+        '-master_pl_name', 'master.m3u8',
+        '-var_stream_map', ' '.join(variant_map),
+        str(output_dir / '%v' / 'index.m3u8'),
+    ])
+    return command
+
+
 def _public_url_for_media_path(media_path):
     relative_path = media_path.relative_to(Path(settings.MEDIA_ROOT)).as_posix()
     return f"{settings.MEDIA_URL.rstrip('/')}/{relative_path}"
@@ -335,24 +456,7 @@ def _ensure_browser_compatible_audio(video_path, movie_id=None) -> bool:
     _update_movie_processing_state(movie_id, step='analizando audio', stage='analisis')
     input_audio_count = _count_audio_streams(video_path)
     processed_path = video_path.with_name(f'{video_path.stem}_processed.mp4')
-    command = [
-        _ffmpeg_binary(),
-        '-y', '-nostdin', '-hide_banner',
-        '-loglevel', 'error',
-        '-i', str(video_path),
-        '-map', '0:v:0',
-        '-map', '0:a?',
-        '-c:v', 'libx264',
-        '-preset', os.getenv('FFMPEG_HLS_PRESET', 'veryfast').strip() or 'veryfast',
-        '-crf', os.getenv('FFMPEG_HLS_CRF', '23').strip() or '23',
-        '-profile:v', 'main',
-        '-pix_fmt', 'yuv420p',
-        '-c:a', 'aac',
-        '-b:a', os.getenv('FFMPEG_HLS_AUDIO_BITRATE', '128k').strip() or '128k',
-        '-ac', '2',
-        '-movflags', '+faststart',
-        str(processed_path),
-    ]
+    command = _build_mp4_transcode_command(video_path, processed_path)
 
     logger.info('Iniciando conversion MP4 compatible con ffmpeg input=%s output=%s', video_path, processed_path)
     _update_movie_processing_state(movie_id, step='convirtiendo a mp4', stage='transcode')
@@ -386,87 +490,8 @@ def _ensure_browser_compatible_audio(video_path, movie_id=None) -> bool:
     return True
 
 
-def _write_master_playlist(master_path, renditions=None):
-    """Escribe el master.m3u8 con multiples #EXT-X-STREAM-INF."""
-    if renditions is None:
-        renditions = HLS_RENDITIONS
-    lines = ['#EXTM3U', '#EXT-X-VERSION:3']
-    for rendition in renditions:
-        lines.append(
-            '#EXT-X-STREAM-INF:'
-            f'BANDWIDTH={rendition["bandwidth"]},'
-            f'RESOLUTION={rendition["width"]}x{rendition["height"]},'
-            f'NAME="{rendition["label"]}",'
-            'CODECS="avc1.4d401f,mp4a.40.2"'
-        )
-        lines.append(f'{rendition["label"]}/index.m3u8')
-    master_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
-
-
-def _generate_hls_rendition(video_path, output_dir, rendition: dict, movie_id=None) -> bool:
-    label = rendition['label']
-    rendition_dir = output_dir / label
-    rendition_dir.mkdir(parents=True, exist_ok=True)
-    playlist_path = rendition_dir / 'index.m3u8'
-    segment_pattern = rendition_dir / 'segment_%03d.ts'
-    scale_filter = (
-        f'scale=w={rendition["width"]}:h={rendition["height"]}:force_original_aspect_ratio=decrease,'
-        f'pad={rendition["width"]}:{rendition["height"]}:(ow-iw)/2:(oh-ih)/2'
-    )
-    command = [
-        _ffmpeg_binary(),
-        '-y', '-nostdin', '-hide_banner',
-        '-loglevel', 'error',
-        '-i', str(video_path),
-        '-map', '0:v:0',
-        '-map', '0:a?',
-        '-c:v', 'libx264',
-        '-preset', os.getenv('FFMPEG_HLS_PRESET', 'veryfast').strip() or 'veryfast',
-        '-profile:v', 'main',
-        '-pix_fmt', 'yuv420p',
-        '-vf', scale_filter,
-        '-b:v', rendition['bitrate'],
-        '-maxrate', rendition['maxrate'],
-        '-bufsize', rendition['bufsize'],
-        '-g', '48',
-        '-keyint_min', '48',
-        '-sc_threshold', '0',
-        '-c:a', 'aac',
-        '-b:a', os.getenv('FFMPEG_HLS_AUDIO_BITRATE', '128k').strip() or '128k',
-        '-ac', '2',
-        '-f', 'hls',
-        '-hls_time', os.getenv('FFMPEG_HLS_TIME', '6').strip() or '6',
-        '-hls_playlist_type', 'vod',
-        '-hls_segment_filename', str(segment_pattern),
-        str(playlist_path),
-    ]
-
-    logger.info('Iniciando rendicion HLS %s movie_id=%s input=%s playlist=%s', label, movie_id, video_path, playlist_path)
-
-    try:
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
-    except FileNotFoundError:
-        logger.error('ffmpeg no esta disponible; no se pudo generar HLS movie_id=%s input=%s', movie_id, video_path)
-        return False
-    except subprocess.CalledProcessError as exc:
-        logger.error('ffmpeg fallo generando HLS %s movie_id=%s input=%s stderr=%s', label, movie_id, video_path, (exc.stderr or '').strip(), exc_info=True)
-        return False
-
-    has_playlist = playlist_path.exists() and playlist_path.stat().st_size > 0
-    has_segments = any(rendition_dir.glob('*.ts'))
-    if not has_playlist or not has_segments:
-        logger.error(
-            'HLS incompleto %s movie_id=%s playlist=%s has_playlist=%s has_segments=%s stdout=%s stderr=%s',
-            label, movie_id, playlist_path, has_playlist, has_segments, (result.stdout or '').strip(), (result.stderr or '').strip(),
-        )
-        return False
-
-    logger.info('Rendicion HLS generada movie_id=%s label=%s output_dir=%s', movie_id, label, rendition_dir)
-    return True
-
-
 def _generate_hls_playlist(video_path, movie_id=None, renditions=None):
-    """Genera HLS multi-bitrate. Devuelve dict {'playlist_url', 'renditions'} o None."""
+    """Genera HLS multi-bitrate en un solo proceso ffmpeg."""
     if renditions is None:
         renditions = list(HLS_RENDITIONS)
     if not renditions:
@@ -474,21 +499,48 @@ def _generate_hls_playlist(video_path, movie_id=None, renditions=None):
         return None
 
     output_dir, playlist_path, playlist_url = _build_hls_output(movie_id=movie_id)
+    audio_count = _count_audio_streams(video_path)
+    has_audio = audio_count != 0
+    first_stage = renditions[0]['stage']
+    labels = ', '.join(r['label'] for r in renditions)
+    _update_movie_processing_state(movie_id, step=f'generando hls {labels}', stage=first_stage)
+    command = _build_multibitrate_hls_command(video_path, output_dir, renditions, has_audio=has_audio)
 
-    for rendition in renditions:
-        _update_movie_processing_state(
-            movie_id, step=f'generando hls {rendition["label"]}', stage=rendition['stage'],
-        )
-        if not _generate_hls_rendition(video_path, output_dir, rendition, movie_id=movie_id):
-            shutil.rmtree(output_dir, ignore_errors=True)
-            return None
-
-    _write_master_playlist(playlist_path, renditions=renditions)
-    has_master = playlist_path.exists() and playlist_path.stat().st_size > 0
-    has_playlists = all((output_dir / r['label'] / 'index.m3u8').exists() for r in renditions)
-    if not has_master or not has_playlists:
+    logger.info(
+        'Iniciando HLS multi-bitrate en un proceso movie_id=%s input=%s output_dir=%s renditions=%s audio=%s',
+        movie_id, video_path, output_dir, [r['label'] for r in renditions], has_audio,
+    )
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+    except FileNotFoundError:
         shutil.rmtree(output_dir, ignore_errors=True)
-        logger.error('Master HLS incompleto movie_id=%s master=%s', movie_id, playlist_path)
+        logger.error('ffmpeg no esta disponible; no se pudo generar HLS movie_id=%s input=%s', movie_id, video_path)
+        return None
+    except subprocess.CalledProcessError as exc:
+        shutil.rmtree(output_dir, ignore_errors=True)
+        logger.error(
+            'ffmpeg fallo generando HLS multi-bitrate movie_id=%s input=%s stderr=%s',
+            movie_id, video_path, (exc.stderr or '').strip(), exc_info=True,
+        )
+        return None
+
+    for rendition in renditions[1:]:
+        _update_movie_processing_state(
+            movie_id, step=f'hls {rendition["label"]} generado', stage=rendition['stage'],
+        )
+
+    has_master = playlist_path.exists() and playlist_path.stat().st_size > 0
+    missing_outputs = [
+        r['label'] for r in renditions
+        if not (output_dir / r['label'] / 'index.m3u8').exists()
+        or not any((output_dir / r['label']).glob('*.ts'))
+    ]
+    if not has_master or missing_outputs:
+        shutil.rmtree(output_dir, ignore_errors=True)
+        logger.error(
+            'HLS multi-bitrate incompleto movie_id=%s master=%s missing=%s stdout=%s stderr=%s',
+            movie_id, playlist_path, missing_outputs, (result.stdout or '').strip(), (result.stderr or '').strip(),
+        )
         return None
 
     logger.info(
@@ -541,6 +593,7 @@ def _generate_thumbnail_previews(video_path, movie_id=None, interval=THUMBNAIL_I
         _ffmpeg_binary(),
         '-y', '-nostdin', '-hide_banner',
         '-loglevel', 'error',
+        '-threads', _ffmpeg_threads(),
         '-i', str(video_path),
         '-an',
         '-vf', tile_filter,

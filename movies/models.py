@@ -65,7 +65,7 @@ class Movie(models.Model):
     video_default_quality = models.CharField(max_length=12, blank=True, default='')
     thumbnail_sprite = models.CharField(max_length=200, blank=True, default='')
     thumbnail_vtt = models.CharField(max_length=200, blank=True, default='')
-    thumbnail_interval = models.PositiveIntegerField(default=5)
+    thumbnail_interval = models.PositiveIntegerField(default=10)
     is_published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
