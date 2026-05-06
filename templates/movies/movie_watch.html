@@ -258,6 +258,7 @@
   const togglePlayBtn = document.querySelector('[data-toggle-play]');
   const togglePlayText = document.querySelector('[data-toggle-play-text]');
   const seekInput = document.querySelector('[data-seek]');
+  const playerBottomBar = document.querySelector('.player-bottom-bar');
   const thumbnailPreview = document.querySelector('[data-thumbnail-preview]');
   const thumbnailImage = document.querySelector('[data-thumbnail-image]');
   const thumbnailTimeLabel = document.querySelector('[data-thumbnail-time]');
@@ -592,7 +593,7 @@
     }
   }
 
-  function parseThumbnailVtt(text, vttUrl) {
+  function parseThumbnailVtt(text, vttUrl, spriteUrl) {
     const lines = String(text || '').split(/\r?\n/);
     const cues = [];
     for (let index = 0; index < lines.length; index += 1) {
@@ -605,7 +606,7 @@
       cues.push({
         start: parseVttTimestamp(startRaw),
         end: parseVttTimestamp(endRaw),
-        imageUrl: resolveThumbnailUrl(match[1], vttUrl),
+        imageUrl: spriteUrl || resolveThumbnailUrl(match[1], vttUrl),
         x: Number(match[2]),
         y: Number(match[3]),
         width: Number(match[4]),
@@ -617,6 +618,7 @@
 
   async function loadThumbnailTrack() {
     const vttUrl = (player.dataset.thumbnailVtt || '').trim();
+    const spriteUrl = (player.dataset.thumbnailSprite || '').trim();
     if (!vttUrl || !thumbnailPreview || !thumbnailImage) return;
     try {
       const response = await fetch(vttUrl, { credentials: 'same-origin' });
@@ -624,7 +626,11 @@
         console.warn('[player] No se pudo cargar preview.vtt', response.status);
         return;
       }
-      thumbnailCues = parseThumbnailVtt(await response.text(), vttUrl);
+      thumbnailCues = parseThumbnailVtt(
+        await response.text(),
+        vttUrl,
+        spriteUrl ? resolveThumbnailUrl(spriteUrl, vttUrl) : ''
+      );
       thumbnailTrackReady = thumbnailCues.length > 0;
       console.log('[player] Thumbnail cues cargados:', thumbnailCues.length);
     } catch (error) {
@@ -657,12 +663,14 @@
     thumbnailTimeLabel.textContent = formatTime(seconds);
 
     const seekRect = seekInput.getBoundingClientRect();
-    const shellRect = (playerShell || document.body).getBoundingClientRect();
+    const containerRect = (playerBottomBar || seekInput.parentElement || playerShell || document.body).getBoundingClientRect();
+    const duration = Number.isFinite(player.duration) ? player.duration : Number(seekInput.max || 0);
+    const ratio = duration > 0 ? Math.min(1, Math.max(0, seconds / duration)) : 0;
     const centerX = typeof clientX === 'number'
-      ? clientX - shellRect.left
-      : seekRect.left - shellRect.left + seekRect.width / 2;
+      ? clientX - containerRect.left
+      : (seekRect.left - containerRect.left) + (seekRect.width * ratio);
     const minX = cue.width / 2 + 12;
-    const maxX = Math.max(minX, shellRect.width - cue.width / 2 - 12);
+    const maxX = Math.max(minX, containerRect.width - cue.width / 2 - 12);
     thumbnailPreview.style.left = `${Math.min(maxX, Math.max(minX, centerX))}px`;
     thumbnailPreview.hidden = false;
   }
