@@ -401,10 +401,10 @@ def _build_hls_output(movie_id=None):
     return output_dir, playlist_path, playlist_url
 
 
-def _build_thumbnail_output(movie_id=None):
+def _build_thumbnail_output(movie_id=None, *, clear_existing=True):
     folder_name = str(movie_id) if movie_id else uuid4().hex
     output_dir = get_local_thumbnails_dir() / folder_name
-    if output_dir.exists():
+    if clear_existing and output_dir.exists():
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     sprite_path = output_dir / 'sprite.jpg'
@@ -416,6 +416,15 @@ def _build_thumbnail_output(movie_id=None):
         'sprite_url': _public_url_for_media_path(sprite_path),
         'vtt_url': _public_url_for_media_path(vtt_path),
     }
+
+
+def _thumbnail_output_is_complete(output):
+    return (
+        output['sprite_path'].exists()
+        and output['sprite_path'].stat().st_size > 0
+        and output['vtt_path'].exists()
+        and output['vtt_path'].stat().st_size > 0
+    )
 
 
 def _update_movie_processing_state(
@@ -576,8 +585,22 @@ def _write_thumbnail_vtt(vtt_path, *, sprite_filename, duration, interval, total
     vtt_path.write_text('\n'.join(lines), encoding='utf-8')
 
 
-def _generate_thumbnail_previews(video_path, movie_id=None, interval=THUMBNAIL_INTERVAL_SECONDS):
+def _generate_thumbnail_previews(video_path, movie_id=None, interval=THUMBNAIL_INTERVAL_SECONDS, *, force=False):
     interval = max(int(interval or THUMBNAIL_INTERVAL_SECONDS), 1)
+    output = _build_thumbnail_output(movie_id=movie_id, clear_existing=False)
+    if not force and _thumbnail_output_is_complete(output):
+        logger.info(
+            'Thumbnails ya existentes; se omite regeneracion movie_id=%s sprite=%s vtt=%s',
+            movie_id, output['sprite_path'], output['vtt_path'],
+        )
+        return {
+            'sprite_url': output['sprite_url'],
+            'vtt_url': output['vtt_url'],
+            'interval': interval,
+        }
+
+    if output['output_dir'].exists():
+        shutil.rmtree(output['output_dir'], ignore_errors=True)
     _update_movie_processing_state(movie_id, step='generando thumbnails', stage='thumbnails')
     output = _build_thumbnail_output(movie_id=movie_id)
     duration = _probe_video_duration(video_path)
@@ -651,6 +674,27 @@ def _generate_thumbnail_previews(video_path, movie_id=None, interval=THUMBNAIL_I
     }
 
 
+def _save_movie_thumbnail_metadata(movie_id, thumbnails, *, mark_ready=False):
+    if not movie_id or not thumbnails:
+        return
+    Movie = apps.get_model('movies', 'Movie')
+    updates = {
+        'thumbnail_sprite': thumbnails.get('sprite_url', ''),
+        'thumbnail_vtt': thumbnails.get('vtt_url', ''),
+        'thumbnail_interval': int(thumbnails.get('interval') or THUMBNAIL_INTERVAL_SECONDS),
+        'error_message': '',
+    }
+    if mark_ready:
+        updates.update({
+            'status': 'listo',
+            'processing_step': 'finalizado',
+            'processing_stage': 'finalizado',
+            'processing_progress': PROCESSING_STAGES['finalizado'],
+            'processing_finished_at': timezone.now(),
+        })
+    Movie.objects.filter(pk=movie_id).update(**updates)
+
+
 def _mark_movie_hls_ready(movie_id, playlist_url: str, renditions=None, original_size=None, thumbnails=None):
     """Marca la pelicula como lista y guarda metadata HLS (calidades, original)."""
     if not movie_id:
@@ -683,6 +727,32 @@ def _mark_movie_hls_ready(movie_id, playlist_url: str, renditions=None, original
     Movie.objects.filter(pk=movie_id).update(**updates)
 
 
+def procesar_thumbnails_background(public_url: str, movie_id=None, *, force=False) -> None:
+    close_old_connections()
+    try:
+        video_path = resolve_local_media_path(public_url)
+        if not video_path or not video_path.exists():
+            logger.warning(
+                'No se generaron thumbnails; archivo local inexistente movie_id=%s public_url=%s path=%s',
+                movie_id, public_url, video_path,
+            )
+            return
+
+        thumbnails = _generate_thumbnail_previews(
+            video_path,
+            movie_id=movie_id,
+            interval=THUMBNAIL_INTERVAL_SECONDS,
+            force=force,
+        )
+        if thumbnails:
+            _save_movie_thumbnail_metadata(movie_id, thumbnails, mark_ready=True)
+            logger.info('Thumbnails listos en background movie_id=%s public_url=%s', movie_id, public_url)
+    except Exception:
+        logger.exception('Error inesperado generando thumbnails en background movie_id=%s public_url=%s', movie_id, public_url)
+    finally:
+        close_old_connections()
+
+
 def procesar_video_background(public_url: str, movie_id=None) -> None:
     close_old_connections()
     try:
@@ -704,6 +774,13 @@ def procesar_video_background(public_url: str, movie_id=None) -> None:
             return
 
         if video_path.suffix.lower() == '.m3u8':
+            thumbnails = _generate_thumbnail_previews(
+                video_path,
+                movie_id=movie_id,
+                interval=THUMBNAIL_INTERVAL_SECONDS,
+            )
+            if thumbnails:
+                _save_movie_thumbnail_metadata(movie_id, thumbnails)
             _update_movie_processing_state(
                 movie_id, status='listo', step='hls finalizado', stage='finalizado',
                 finished_at=timezone.now(), clear_error=True,
@@ -784,6 +861,16 @@ def start_video_processing_background(public_url: str, movie_id=None) -> None:
         args=(public_url, movie_id),
         daemon=True,
         name=f'video-processing-{movie_id or "pending"}',
+    )
+    thread.start()
+
+
+def start_thumbnail_processing_background(public_url: str, movie_id=None, *, force=False) -> None:
+    thread = threading.Thread(
+        target=procesar_thumbnails_background,
+        kwargs={'public_url': public_url, 'movie_id': movie_id, 'force': force},
+        daemon=True,
+        name=f'thumbnail-processing-{movie_id or "pending"}',
     )
     thread.start()
 

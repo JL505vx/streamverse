@@ -11,10 +11,12 @@ from movies.models import Genre, Movie
 
 from .local_media import (
     PROCESSING_STAGES,
+    THUMBNAIL_INTERVAL_SECONDS,
     delete_local_thumbnails,
     delete_local_video,
     get_local_video_max_bytes,
     save_uploaded_video_locally,
+    start_thumbnail_processing_background,
     start_video_processing_background,
 )
 from .models import (
@@ -89,6 +91,10 @@ def _video_needs_local_processing(movie) -> bool:
     return bool(movie.video_url and movie.video_url.startswith(settings.MEDIA_URL))
 
 
+def _video_needs_thumbnail_generation(movie) -> bool:
+    return bool(movie.video_url and movie.video_url.startswith(settings.MEDIA_URL))
+
+
 def _mark_video_received(movie):
     movie.status = Movie.ProcessingStatus.PROCESSING
     movie.processing_step = 'recibido'
@@ -99,7 +105,7 @@ def _mark_video_received(movie):
     movie.error_message = ''
     movie.thumbnail_sprite = ''
     movie.thumbnail_vtt = ''
-    movie.thumbnail_interval = 5
+    movie.thumbnail_interval = THUMBNAIL_INTERVAL_SECONDS
 
 
 def _mark_video_ready(movie):
@@ -111,7 +117,7 @@ def _mark_video_ready(movie):
     movie.error_message = ''
     movie.thumbnail_sprite = ''
     movie.thumbnail_vtt = ''
-    movie.thumbnail_interval = 5
+    movie.thumbnail_interval = THUMBNAIL_INTERVAL_SECONDS
 
 
 def _mark_video_empty(movie):
@@ -124,7 +130,7 @@ def _mark_video_empty(movie):
     movie.error_message = ''
     movie.thumbnail_sprite = ''
     movie.thumbnail_vtt = ''
-    movie.thumbnail_interval = 5
+    movie.thumbnail_interval = THUMBNAIL_INTERVAL_SECONDS
 
 
 class StyledAuthenticationForm(AuthenticationForm):
@@ -393,6 +399,7 @@ class MovieAdminForm(forms.ModelForm):
         chunk_upload_filename = self.cleaned_data.get('chunk_upload_filename')
         chunk_upload_size_bytes = self.cleaned_data.get('chunk_upload_size_bytes')
         should_process_video = False
+        should_generate_thumbnails = False
 
         if cover_upload:
             movie.cover_url = upload_uploaded_file(cover_upload, folder='covers', replace_url=movie.cover_url)
@@ -427,6 +434,7 @@ class MovieAdminForm(forms.ModelForm):
             _clear_video_upload_metadata(movie)
             if movie.video_url:
                 _mark_video_ready(movie)
+                should_generate_thumbnails = _video_needs_thumbnail_generation(movie)
             else:
                 _mark_video_empty(movie)
 
@@ -434,6 +442,8 @@ class MovieAdminForm(forms.ModelForm):
             movie.save()
             if should_process_video:
                 start_video_processing_background(movie.video_url, movie_id=movie.pk)
+            elif should_generate_thumbnails:
+                start_thumbnail_processing_background(movie.video_url, movie_id=movie.pk)
         return movie
 
 
@@ -499,6 +509,7 @@ class MovieMediaForm(forms.ModelForm):
         chunk_upload_filename = self.cleaned_data.get('chunk_upload_filename')
         chunk_upload_size_bytes = self.cleaned_data.get('chunk_upload_size_bytes')
         should_process_video = False
+        should_generate_thumbnails = False
 
         if self.cleaned_data.get('remove_cover_file'):
             delete_public_file(movie.cover_url)
@@ -546,6 +557,7 @@ class MovieMediaForm(forms.ModelForm):
             _clear_video_upload_metadata(movie)
             if movie.video_url:
                 _mark_video_ready(movie)
+                should_generate_thumbnails = _video_needs_thumbnail_generation(movie)
             else:
                 _mark_video_empty(movie)
 
@@ -553,6 +565,8 @@ class MovieMediaForm(forms.ModelForm):
             movie.save()
             if should_process_video:
                 start_video_processing_background(movie.video_url, movie_id=movie.pk)
+            elif should_generate_thumbnails:
+                start_thumbnail_processing_background(movie.video_url, movie_id=movie.pk)
         return movie
 
 
