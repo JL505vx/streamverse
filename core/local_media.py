@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+import json
 import re
 import shutil
 import subprocess
@@ -90,6 +91,10 @@ def _ffmpeg_threads() -> str:
 
 def _ffmpeg_audio_bitrate() -> str:
     return os.getenv('FFMPEG_HLS_AUDIO_BITRATE', '128k').strip() or '128k'
+
+
+def _ffmpeg_browser_audio_bitrate() -> str:
+    return os.getenv('FFMPEG_BROWSER_AUDIO_BITRATE', '192k').strip() or '192k'
 
 
 def _ffmpeg_hls_time() -> str:
@@ -284,6 +289,55 @@ def _count_audio_streams(video_path):
     return len([line for line in result.stdout.splitlines() if line.strip()])
 
 
+def _probe_media_streams(video_path):
+    command = [
+        _ffprobe_binary(),
+        '-v', 'error',
+        '-show_streams',
+        '-print_format', 'json',
+        str(video_path),
+    ]
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        payload = json.loads(result.stdout or '{}')
+        return payload.get('streams') or []
+    except FileNotFoundError:
+        logger.info('ffprobe no esta disponible; no se puede inspeccionar codecs path=%s', video_path)
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        logger.error('ffprobe fallo inspeccionando codecs path=%s error=%s', video_path, exc)
+    return []
+
+
+def _stream_language(stream):
+    tags = stream.get('tags') or {}
+    return str(tags.get('language') or tags.get('LANGUAGE') or '').strip().lower()
+
+
+def _select_browser_audio_stream(streams):
+    audio_streams = [stream for stream in streams if stream.get('codec_type') == 'audio']
+    if not audio_streams:
+        return None
+    spanish_codes = {'spa', 'es', 'esp', 'spanish', 'es-mx', 'es-es'}
+    for stream in audio_streams:
+        if _stream_language(stream) in spanish_codes:
+            return stream
+    return audio_streams[0]
+
+
+def _browser_fixed_video_path(video_path):
+    suffix = video_path.suffix.lower()
+    if video_path.stem.endswith('_fix') and suffix == '.mp4':
+        return video_path
+    return video_path.with_name(f'{video_path.stem}_fix.mp4')
+
+
+def _public_url_for_existing_local_media_path(media_path):
+    try:
+        return _public_url_for_media_path(media_path)
+    except ValueError:
+        return ''
+
+
 def _build_mp4_transcode_command(input_path, output_path):
     return [
         _ffmpeg_binary(),
@@ -299,7 +353,27 @@ def _build_mp4_transcode_command(input_path, output_path):
         '-profile:v', 'main',
         '-pix_fmt', 'yuv420p',
         '-c:a', 'aac',
-        '-b:a', _ffmpeg_audio_bitrate(),
+        '-b:a', _ffmpeg_browser_audio_bitrate(),
+        '-ac', '2',
+        '-movflags', '+faststart',
+        str(output_path),
+    ]
+
+
+def _build_browser_audio_fix_command(input_path, output_path, audio_stream=None):
+    audio_index = audio_stream.get('index') if audio_stream else None
+    audio_map = f'0:{audio_index}' if audio_index is not None else '0:a:0?'
+    return [
+        _ffmpeg_binary(),
+        '-y', '-nostdin', '-hide_banner',
+        '-loglevel', 'info',
+        '-threads', _ffmpeg_threads(),
+        '-i', str(input_path),
+        '-map', '0:v:0',
+        '-map', audio_map,
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', _ffmpeg_browser_audio_bitrate(),
         '-ac', '2',
         '-movflags', '+faststart',
         str(output_path),
@@ -461,42 +535,105 @@ def _update_movie_processing_state(
         Movie.objects.filter(pk=movie_id).update(**updates)
 
 
-def _ensure_browser_compatible_audio(video_path, movie_id=None) -> bool:
-    _update_movie_processing_state(movie_id, step='analizando audio', stage='analisis')
-    input_audio_count = _count_audio_streams(video_path)
-    processed_path = video_path.with_name(f'{video_path.stem}_processed.mp4')
-    command = _build_mp4_transcode_command(video_path, processed_path)
+def _save_movie_video_url(movie_id, video_path):
+    if not movie_id:
+        return
+    public_url = _public_url_for_existing_local_media_path(video_path)
+    if public_url:
+        Movie = apps.get_model('movies', 'Movie')
+        Movie.objects.filter(pk=movie_id).update(video_url=public_url)
 
-    logger.info('Iniciando conversion MP4 compatible con ffmpeg input=%s output=%s', video_path, processed_path)
-    _update_movie_processing_state(movie_id, step='convirtiendo a mp4', stage='transcode')
+
+def process_video(video_path, movie_id=None):
+    """
+    Normaliza un archivo local para navegador sin bloquear la request.
+    Devuelve el Path usable o None si ffmpeg/ffprobe fallan.
+    """
+    video_path = Path(video_path)
+    if video_path.suffix.lower() == '.m3u8':
+        logger.info('Archivo HLS detectado; se omite normalizacion browser movie_id=%s path=%s', movie_id, video_path)
+        return video_path
+
+    _update_movie_processing_state(movie_id, step='analizando audio', stage='analisis')
+    streams = _probe_media_streams(video_path)
+    if not streams:
+        logger.error('No se pudo analizar video para compatibilidad browser movie_id=%s path=%s', movie_id, video_path)
+        return None
+
+    video_stream = next((stream for stream in streams if stream.get('codec_type') == 'video'), None)
+    audio_stream = _select_browser_audio_stream(streams)
+    video_codec = str((video_stream or {}).get('codec_name') or '').lower()
+    audio_codec = str((audio_stream or {}).get('codec_name') or '').lower()
+    fixed_path = _browser_fixed_video_path(video_path)
+
+    if video_codec in {'h264', 'avc1'} and (not audio_stream or audio_codec == 'aac') and video_path.suffix.lower() == '.mp4':
+        logger.info(
+            'Video compatible con navegador; se omite conversion movie_id=%s path=%s video=%s audio=%s',
+            movie_id, video_path, video_codec, audio_codec or 'sin_audio',
+        )
+        return video_path
+
+    if fixed_path.exists() and fixed_path.stat().st_size > 0:
+        logger.info(
+            'Conversion browser ya existe; se reutiliza movie_id=%s input=%s output=%s',
+            movie_id, video_path, fixed_path,
+        )
+        _save_movie_video_url(movie_id, fixed_path)
+        return fixed_path
+
+    if video_codec in {'h264', 'avc1'}:
+        command = _build_browser_audio_fix_command(video_path, fixed_path, audio_stream=audio_stream)
+        conversion_label = 'audio a AAC con video copy'
+    else:
+        command = _build_mp4_transcode_command(video_path, fixed_path)
+        conversion_label = 'video/audio a MP4 compatible'
+
+    logger.info(
+        'Inicio conversion browser movie_id=%s tipo=%s input=%s output=%s video=%s audio=%s lang=%s',
+        movie_id, conversion_label, video_path, fixed_path, video_codec or 'desconocido',
+        audio_codec or 'sin_audio', _stream_language(audio_stream or {}) or 'desconocido',
+    )
+    logger.info('Progreso conversion browser movie_id=%s estado=iniciado output=%s', movie_id, fixed_path)
+    _update_movie_processing_state(movie_id, step='convirtiendo a mp4 compatible', stage='transcode')
 
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True)
-        output_audio_count = _count_audio_streams(processed_path)
+        input_audio_count = len([s for s in streams if s.get('codec_type') == 'audio'])
+        output_audio_count = _count_audio_streams(fixed_path)
         if input_audio_count != 0 and not output_audio_count:
             logger.error(
                 'ffmpeg genero un archivo sin audio; se conserva el original path=%s audio_entrada=%s stdout=%s stderr=%s',
                 video_path, input_audio_count, (result.stdout or '').strip(), (result.stderr or '').strip(),
             )
-            processed_path.unlink(missing_ok=True)
-            return False
-        processed_path.replace(video_path)
+            fixed_path.unlink(missing_ok=True)
+            return None
     except subprocess.CalledProcessError as exc:
-        if processed_path.exists():
-            processed_path.unlink()
-        logger.error('ffmpeg fallo; se conserva el archivo original path=%s stderr=%s', video_path, (exc.stderr or '').strip(), exc_info=True)
-        return False
+        if fixed_path.exists():
+            fixed_path.unlink()
+        logger.error(
+            'ffmpeg fallo en conversion browser movie_id=%s input=%s stderr=%s',
+            movie_id, video_path, (exc.stderr or '').strip(), exc_info=True,
+        )
+        return None
+    except FileNotFoundError:
+        logger.error('ffmpeg no esta disponible para conversion browser movie_id=%s input=%s', movie_id, video_path)
+        return None
     except Exception as exc:
-        if processed_path.exists():
-            processed_path.unlink()
-        logger.error('No se pudo convertir audio a AAC con ffmpeg; se conserva el archivo original path=%s error=%s', video_path, exc, exc_info=True)
-        return False
+        if fixed_path.exists():
+            fixed_path.unlink()
+        logger.error('No se pudo convertir video browser movie_id=%s path=%s error=%s', movie_id, video_path, exc, exc_info=True)
+        return None
 
     logger.info(
-        'Conversion ffmpeg completada y archivo reemplazado path=%s audio_entrada=%s audio_salida=%s stdout=%s stderr=%s',
-        video_path, input_audio_count, output_audio_count, (result.stdout or '').strip(), (result.stderr or '').strip(),
+        'Terminado conversion browser movie_id=%s output=%s audio_salida=%s stdout=%s stderr=%s',
+        movie_id, fixed_path, output_audio_count, (result.stdout or '').strip(), (result.stderr or '').strip(),
     )
-    return True
+    _save_movie_video_url(movie_id, fixed_path)
+    return fixed_path
+
+
+def _ensure_browser_compatible_audio(video_path, movie_id=None) -> bool:
+    return process_video(video_path, movie_id=movie_id) is not None
 
 
 def _generate_hls_playlist(video_path, movie_id=None, renditions=None):
@@ -738,6 +875,10 @@ def procesar_thumbnails_background(public_url: str, movie_id=None, *, force=Fals
             )
             return
 
+        normalized_path = process_video(video_path, movie_id=movie_id)
+        if normalized_path:
+            video_path = normalized_path
+
         thumbnails = _generate_thumbnail_previews(
             video_path,
             movie_id=movie_id,
@@ -788,14 +929,15 @@ def procesar_video_background(public_url: str, movie_id=None) -> None:
             logger.info('Video ya esta en HLS; se omite procesamiento movie_id=%s public_url=%s', movie_id, public_url)
             return
 
-        processed_ok = _ensure_browser_compatible_audio(video_path, movie_id=movie_id)
-        if not processed_ok:
+        normalized_path = process_video(video_path, movie_id=movie_id)
+        if not normalized_path:
             _update_movie_processing_state(
                 movie_id, status='error', step='error', stage='error',
                 progress=0, finished_at=timezone.now(),
                 error_message='No se pudo convertir el video a MP4 compatible.',
             )
             return
+        video_path = normalized_path
 
         # Detectar resolucion original tras la normalizacion: asi sabemos que calidades
         # tiene sentido generar (no escalar 480p a 720p innecesariamente).
