@@ -13,7 +13,7 @@ Environment=APP_ROLE=admin
 Environment=CLIENT_BASE_URL=https://app.projectgp.online
 Environment=ADMIN_BASE_URL=https://admin.projectgp.online
 ExecStart=/mnt/ssd1/proyectos/streamverse/.venv/bin/gunicorn config.wsgi_admin:application \
-  --bind 127.0.0.1:8033 \
+  --bind 127.0.0.1:8032 \
   --workers 1 \
   --threads 2 \
   --timeout 300 \

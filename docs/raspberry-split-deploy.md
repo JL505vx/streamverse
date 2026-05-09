@@ -4,8 +4,8 @@ Objetivo de esta fase: mantener un solo repo Django, pero correr dos procesos se
 
 ```text
 projectgp.online        -> landing actual
-app.projectgp.online    -> StreamVerse cliente -> 127.0.0.1:8032
-admin.projectgp.online  -> StreamVerse admin   -> 127.0.0.1:8033
+app.projectgp.online    -> StreamVerse cliente -> 127.0.0.1:8033
+admin.projectgp.online  -> StreamVerse admin   -> 127.0.0.1:8032
 ```
 
 ## 1. DNS en Cloudflare
@@ -77,8 +77,8 @@ sudo systemctl status streamverse-admin --no-pager
 Pruebas por IP local antes de dominio:
 
 ```bash
-curl -I http://127.0.0.1:8032/
-curl -I http://127.0.0.1:8033/login/
+curl -I http://127.0.0.1:8033/
+curl -I http://127.0.0.1:8032/login/
 ```
 
 ## 5. Instalar Nginx

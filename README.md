@@ -164,7 +164,7 @@ py -3.11 -m venv .venv
 python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 & .\.venv\Scripts\python.exe manage.py migrate
-& .\.venv\Scripts\python.exe manage.py runserver 8032
+& .\.venv\Scripts\python.exe manage.py runserver 8033 --settings=config.settings_client
 ```
 
 ### Comandos utiles
@@ -172,18 +172,19 @@ Copy-Item .env.example .env
 ```powershell
 & .\.venv\Scripts\python.exe manage.py check
 & .\.venv\Scripts\python.exe manage.py migrate
-& .\.venv\Scripts\python.exe manage.py runserver 8032
+& .\.venv\Scripts\python.exe manage.py runserver 8032 --settings=config.settings_admin
+& .\.venv\Scripts\python.exe manage.py runserver 8033 --settings=config.settings_client
 ```
 
 ## URLs importantes
 
-- Home: `http://127.0.0.1:8032/`
-- Login: `http://127.0.0.1:8032/cuenta/login/`
-- Registro: `http://127.0.0.1:8032/cuenta/registro/`
-- Dashboard usuario: `http://127.0.0.1:8032/cuenta/dashboard/`
-- Ajustes usuario: `http://127.0.0.1:8032/cuenta/ajustes/`
-- Panel admin: `http://127.0.0.1:8032/cuenta/panel-admin/`
-- Catalogo admin: `http://127.0.0.1:8032/cuenta/panel-admin/peliculas/`
+- Admin local: `http://127.0.0.1:8032/`
+- Admin login: `http://127.0.0.1:8032/login/`
+- Admin catalogo: `http://127.0.0.1:8032/peliculas/`
+- Cliente home: `http://127.0.0.1:8033/`
+- Cliente login: `http://127.0.0.1:8033/cuenta/login/`
+- Cliente registro: `http://127.0.0.1:8033/cuenta/registro/`
+- Cliente dashboard: `http://127.0.0.1:8033/cuenta/dashboard/`
 
 ## Que hace el proyecto
 
