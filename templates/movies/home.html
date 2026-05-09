@@ -21,8 +21,13 @@
     <div class="hero-actions landing-actions">
       {% if user.is_authenticated %}
         {% if user.is_staff %}
-          <a class="btn-primary" href="{% url 'admin_panel' %}">Panel admin</a>
-          <a class="btn-ghost" href="{% url 'admin_movies' %}">Subir catalogo</a>
+          {% if admin_base_url %}
+            <a class="btn-primary" href="{{ admin_base_url }}/">Panel admin</a>
+            <a class="btn-ghost" href="{{ admin_base_url }}/peliculas/">Subir catalogo</a>
+          {% else %}
+            <a class="btn-primary" href="{% url 'admin_panel' %}">Panel admin</a>
+            <a class="btn-ghost" href="{% url 'admin_movies' %}">Subir catalogo</a>
+          {% endif %}
         {% else %}
           <a class="btn-primary" href="{% url 'user_dashboard' %}">Ir a mi espacio</a>
           <a class="btn-ghost" href="#explorar">Explorar catalogo</a>

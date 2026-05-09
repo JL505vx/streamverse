@@ -58,7 +58,7 @@
   <!-- ── Topbar ───────────────────────────────────────── -->
   <header class="topbar glass" role="banner">
     <a class="brand"
-       href="{% if user.is_authenticated and user.is_staff %}{% url 'admin_panel' %}{% else %}{% url 'home' %}{% endif %}"
+       href="{% if app_role == 'admin' %}{% url 'admin_panel' %}{% elif app_role == 'client' or not user.is_staff %}{% url 'home' %}{% elif admin_base_url %}{{ admin_base_url }}/{% else %}{% url 'admin_panel' %}{% endif %}"
        aria-label="StreamVerse — Inicio">
       StreamVerse
     </a>
@@ -67,13 +67,13 @@
       {% if user.is_authenticated %}
         {% if user.is_staff %}
           <span class="chip">{{ user.username }}</span>
-          <a href="{% url 'admin_panel' %}">Panel</a>
+          <a href="{% if admin_base_url and app_role == 'client' %}{{ admin_base_url }}/{% else %}{% url 'admin_panel' %}{% endif %}">Panel</a>
           <a href="{% url 'home' %}" class="admin-switch">Vista pública</a>
         {% else %}
           <a href="{% url 'user_dashboard' %}">Mi espacio</a>
           <a href="{% url 'user_settings' %}">Ajustes</a>
         {% endif %}
-        <form method="post" action="{% if user.is_staff %}{% url 'admin_logout' %}{% else %}{% url 'logout' %}{% endif %}" class="logout-form">
+        <form method="post" action="{% if app_role == 'client' %}{% url 'logout' %}{% elif user.is_staff %}{% url 'admin_logout' %}{% else %}{% url 'logout' %}{% endif %}" class="logout-form">
           {% csrf_token %}
           <input type="hidden" name="auth_scope" value="{% if user.is_staff %}admin{% else %}user{% endif %}">
           <button type="submit" class="btn-mini">Salir</button>
@@ -81,8 +81,12 @@
       {% else %}
         <a href="{% url 'home' %}">Inicio</a>
         <a href="{% url 'login' %}">Entrar</a>
-        <a href="{% url 'admin_login' %}" class="admin-switch">Acceso admin</a>
-        <a class="btn-mini" href="{% url 'signup' %}">Registro</a>
+        {% if app_role == 'client' and admin_base_url %}
+          <a href="{{ admin_base_url }}/login/" class="admin-switch">Acceso admin</a>
+        {% elif app_role != 'client' %}
+          <a href="{% url 'admin_login' %}" class="admin-switch">Acceso admin</a>
+        {% endif %}
+        {% if app_role != 'admin' %}<a class="btn-mini" href="{% url 'signup' %}">Registro</a>{% endif %}
       {% endif %}
     </nav>
   </header>

@@ -44,7 +44,12 @@
 
   <p class="muted" style="text-align:center;font-size:0.85rem;margin-top:1rem;">
     {% if auth_scope == 'admin' %}
-      ¿Solo quieres ver contenido? <a href="{% url 'login' %}" style="color:var(--primary-light);">Acceso de usuarios</a>
+      ¿Solo quieres ver contenido?
+      {% if client_base_url %}
+        <a href="{{ client_base_url }}/cuenta/login/" style="color:var(--primary-light);">Acceso de usuarios</a>
+      {% else %}
+        <a href="{% url 'login' %}" style="color:var(--primary-light);">Acceso de usuarios</a>
+      {% endif %}
     {% else %}
       ¿No tienes cuenta? <a href="{% url 'signup' %}" style="color:var(--primary-light);">Regístrate aquí</a>
     {% endif %}

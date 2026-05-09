@@ -11,8 +11,10 @@ from .env_utils import build_csrf_trusted_origins, split_csv
 BASE_DIR = Path(__file__).resolve().parent.parent
 env_path = BASE_DIR / '.env'
 load_dotenv(env_path, override=True)
-print(f'[DB DEBUG] dotenv path: {env_path}')
-print(f'[DB DEBUG] dotenv exists: {env_path.exists()}')
+DB_DEBUG = os.getenv('DB_DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on')
+if DB_DEBUG:
+    print(f'[DB DEBUG] dotenv path: {env_path}')
+    print(f'[DB DEBUG] dotenv exists: {env_path.exists()}')
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-me')
 DEBUG = os.getenv('DEBUG', '1').strip().lower() in ('1', 'true', 'yes', 'on')
@@ -60,6 +62,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.deployment_links',
             ],
         },
     },
@@ -81,10 +84,11 @@ if parsed_db_url.hostname and parsed_db_url.hostname.endswith('supabase.com') an
 DATABASES = {
     'default': dj_database_url.parse(database_url, conn_max_age=600)
 }
-print(f'[DB DEBUG] DATABASE_URL: {database_url}')
-print(f"[DB DEBUG] active engine: {DATABASES['default']['ENGINE']}")
-print(f"[DB DEBUG] active host: {DATABASES['default'].get('HOST')}")
-print(f"[DB DEBUG] active name: {DATABASES['default'].get('NAME')}")
+if DB_DEBUG:
+    print(f'[DB DEBUG] DATABASE_URL: {database_url}')
+    print(f"[DB DEBUG] active engine: {DATABASES['default']['ENGINE']}")
+    print(f"[DB DEBUG] active host: {DATABASES['default'].get('HOST')}")
+    print(f"[DB DEBUG] active name: {DATABASES['default'].get('NAME')}")
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -158,6 +162,10 @@ LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'user_dashboard'
 LOGOUT_REDIRECT_URL = 'home'
 CSRF_FAILURE_VIEW = 'core.views.csrf_failure_view'
+
+APP_ROLE = os.getenv('APP_ROLE', 'monolith').strip() or 'monolith'
+ADMIN_BASE_URL = os.getenv('ADMIN_BASE_URL', '').strip().rstrip('/')
+CLIENT_BASE_URL = os.getenv('CLIENT_BASE_URL', '').strip().rstrip('/')
 
 USER_SESSION_COOKIE_NAME = 'user_sessionid'
 ADMIN_SESSION_COOKIE_NAME = 'admin_sessionid'

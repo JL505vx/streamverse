@@ -1,5 +1,7 @@
 from urllib.parse import urlparse
 
+from django.conf import settings
+
 
 ADMIN_PATH_PREFIXES = ('/admin', '/cuenta/panel-admin', '/cuenta/upload-chunk')
 
@@ -10,6 +12,11 @@ def is_admin_path(path: str) -> bool:
 
 
 def resolve_auth_scope(request) -> str:
+    if getattr(settings, 'APP_ROLE', '') == 'admin':
+        return 'admin'
+    if getattr(settings, 'APP_ROLE', '') == 'client':
+        return 'user'
+
     for source in (getattr(request, 'POST', None), getattr(request, 'GET', None)):
         if not source:
             continue

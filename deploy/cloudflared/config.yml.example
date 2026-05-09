@@ -1,0 +1,11 @@
+tunnel: devgp
+credentials-file: /home/pi/.cloudflared/devgp.json
+
+ingress:
+  - hostname: projectgp.online
+    service: http://127.0.0.1:80
+  - hostname: app.projectgp.online
+    service: http://127.0.0.1:80
+  - hostname: admin.projectgp.online
+    service: http://127.0.0.1:80
+  - service: http_status:404

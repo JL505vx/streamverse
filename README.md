@@ -145,6 +145,17 @@ SUPABASE_KEY=tu-service-role-o-anon-key
 
 ## Como levantar el proyecto
 
+### Deploy separado en Raspberry
+
+La guia de produccion para correr cliente y admin como procesos separados esta en:
+
+- `docs/raspberry-split-deploy.md`
+
+Entry points nuevos:
+
+- Cliente: `config.settings_client` + `config.wsgi_client`
+- Admin: `config.settings_admin` + `config.wsgi_admin`
+
 ### Instalacion inicial
 
 ```powershell

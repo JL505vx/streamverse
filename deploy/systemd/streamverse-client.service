@@ -1,0 +1,28 @@
+[Unit]
+Description=Gunicorn for StreamVerse client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+Group=www-data
+WorkingDirectory=/mnt/ssd1/proyectos/streamverse
+EnvironmentFile=/mnt/ssd1/proyectos/streamverse/.env
+Environment=DJANGO_SETTINGS_MODULE=config.settings_client
+Environment=APP_ROLE=client
+Environment=CLIENT_BASE_URL=https://app.projectgp.online
+Environment=ADMIN_BASE_URL=https://admin.projectgp.online
+ExecStart=/mnt/ssd1/proyectos/streamverse/.venv/bin/gunicorn config.wsgi_client:application \
+  --bind 127.0.0.1:8032 \
+  --workers 2 \
+  --threads 2 \
+  --timeout 180 \
+  --access-logfile - \
+  --error-logfile -
+Restart=always
+RestartSec=5
+KillSignal=SIGQUIT
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
