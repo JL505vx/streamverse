@@ -50,6 +50,10 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+MODE = os.getenv('DJANGO_MODE', os.getenv('APP_ROLE', 'monolith')).strip().lower() or 'monolith'
+if MODE not in {'admin', 'client', 'monolith'}:
+    MODE = 'monolith'
+
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
@@ -163,14 +167,38 @@ LOGIN_REDIRECT_URL = 'user_dashboard'
 LOGOUT_REDIRECT_URL = 'home'
 CSRF_FAILURE_VIEW = 'core.views.csrf_failure_view'
 
-APP_ROLE = os.getenv('APP_ROLE', 'monolith').strip() or 'monolith'
+APP_ROLE = MODE
 ADMIN_BASE_URL = os.getenv('ADMIN_BASE_URL', '').strip().rstrip('/')
 CLIENT_BASE_URL = os.getenv('CLIENT_BASE_URL', '').strip().rstrip('/')
 
 USER_SESSION_COOKIE_NAME = 'user_sessionid'
 ADMIN_SESSION_COOKIE_NAME = 'admin_sessionid'
-SESSION_COOKIE_NAME = USER_SESSION_COOKIE_NAME
 
 USER_CSRF_COOKIE_NAME = 'user_csrftoken'
 ADMIN_CSRF_COOKIE_NAME = 'admin_csrftoken'
-CSRF_COOKIE_NAME = USER_CSRF_COOKIE_NAME
+if MODE == 'admin':
+    SESSION_COOKIE_NAME = ADMIN_SESSION_COOKIE_NAME
+    CSRF_COOKIE_NAME = ADMIN_CSRF_COOKIE_NAME
+    LOGIN_URL = 'admin_login'
+    LOGIN_REDIRECT_URL = 'admin_panel'
+    LOGOUT_REDIRECT_URL = 'admin_login'
+    ADMIN_BASE_URL = os.getenv('ADMIN_BASE_URL', 'https://admin.projectgp.online').strip().rstrip('/')
+    CLIENT_BASE_URL = os.getenv('CLIENT_BASE_URL', 'https://app.projectgp.online').strip().rstrip('/')
+    for host in ('admin.projectgp.online',):
+        if host not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(host)
+    for origin in (ADMIN_BASE_URL,):
+        if origin and origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(origin)
+else:
+    SESSION_COOKIE_NAME = USER_SESSION_COOKIE_NAME
+    CSRF_COOKIE_NAME = USER_CSRF_COOKIE_NAME
+    if MODE == 'client':
+        CLIENT_BASE_URL = os.getenv('CLIENT_BASE_URL', 'https://app.projectgp.online').strip().rstrip('/')
+        ADMIN_BASE_URL = os.getenv('ADMIN_BASE_URL', 'https://admin.projectgp.online').strip().rstrip('/')
+        for host in ('app.projectgp.online',):
+            if host not in ALLOWED_HOSTS:
+                ALLOWED_HOSTS.append(host)
+        for origin in (CLIENT_BASE_URL,):
+            if origin and origin not in CSRF_TRUSTED_ORIGINS:
+                CSRF_TRUSTED_ORIGINS.append(origin)
