@@ -172,9 +172,11 @@ Copy-Item .env.example .env
 ```powershell
 & .\.venv\Scripts\python.exe manage.py check
 & .\.venv\Scripts\python.exe manage.py migrate
-& .\.venv\Scripts\python.exe manage.py runserver 8032 --settings=config.settings_admin
-& .\.venv\Scripts\python.exe manage.py runserver 8033 --settings=config.settings_client
+& .\.venv\Scripts\python.exe manage.py runserver 8032
+& .\.venv\Scripts\python.exe manage.py runserver 8033
 ```
+
+`manage.py` selecciona automaticamente `config.settings_admin` para el puerto `8032` y `config.settings_client` para el puerto `8033`.
 
 ## URLs importantes
 
@@ -221,6 +223,7 @@ Copy-Item .env.example .env
 - `templates/core/admin_panel.html`
 - `static/css/main.css`
 - `static/js/cinema-scene.js`
+- `docs/repo-audit-version3.1.md`
 
 ## Notas
 

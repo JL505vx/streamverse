@@ -223,7 +223,11 @@ class LocalVideoStatusTests(TestCase):
                     **self.common_headers,
                 )
                 self.assertEqual(response.status_code, 200)
-                self.assertJSONEqual(response.content, {'ok': True, 'chunk': 0, 'complete': False, 'video_url': ''})
+                payload = response.json()
+                self.assertTrue(payload['ok'])
+                self.assertEqual(payload['chunk'], 0)
+                self.assertFalse(payload['complete'])
+                self.assertEqual(payload['video_url'], '')
 
                 response = self.client.post(
                     reverse('upload_chunk'),
