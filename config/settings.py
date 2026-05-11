@@ -6,8 +6,6 @@ import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
-from .env_utils import build_csrf_trusted_origins, split_csv
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 env_path = BASE_DIR / '.env'
 load_dotenv(env_path, override=True)
@@ -18,14 +16,8 @@ if DB_DEBUG:
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-me')
 DEBUG = os.getenv('DEBUG', '1').strip().lower() in ('1', 'true', 'yes', 'on')
-ALLOWED_HOSTS = split_csv(os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost'))
-if DEBUG and '*' not in ALLOWED_HOSTS:
-    # En desarrollo permitimos IPs de la red local para probar desde celular.
-    ALLOWED_HOSTS.append('*')
-CSRF_TRUSTED_ORIGINS = build_csrf_trusted_origins(
-    split_csv(os.getenv('CSRF_TRUSTED_ORIGINS', '')),
-    [host for host in ALLOWED_HOSTS if host != '*'],
-)
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', 'http://localhost').split(',')
 
 INSTALLED_APPS = [
     'daphne',
@@ -184,21 +176,9 @@ if MODE == 'admin':
     LOGOUT_REDIRECT_URL = 'admin_login'
     ADMIN_BASE_URL = os.getenv('ADMIN_BASE_URL', 'https://admin.projectgp.online').strip().rstrip('/')
     CLIENT_BASE_URL = os.getenv('CLIENT_BASE_URL', 'https://app.projectgp.online').strip().rstrip('/')
-    for host in ('admin.projectgp.online',):
-        if host not in ALLOWED_HOSTS:
-            ALLOWED_HOSTS.append(host)
-    for origin in (ADMIN_BASE_URL,):
-        if origin and origin not in CSRF_TRUSTED_ORIGINS:
-            CSRF_TRUSTED_ORIGINS.append(origin)
 else:
     SESSION_COOKIE_NAME = USER_SESSION_COOKIE_NAME
     CSRF_COOKIE_NAME = USER_CSRF_COOKIE_NAME
     if MODE == 'client':
         CLIENT_BASE_URL = os.getenv('CLIENT_BASE_URL', 'https://app.projectgp.online').strip().rstrip('/')
         ADMIN_BASE_URL = os.getenv('ADMIN_BASE_URL', 'https://admin.projectgp.online').strip().rstrip('/')
-        for host in ('app.projectgp.online',):
-            if host not in ALLOWED_HOSTS:
-                ALLOWED_HOSTS.append(host)
-        for origin in (CLIENT_BASE_URL,):
-            if origin and origin not in CSRF_TRUSTED_ORIGINS:
-                CSRF_TRUSTED_ORIGINS.append(origin)
