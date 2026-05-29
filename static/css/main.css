@@ -4392,6 +4392,195 @@ body {
   isolation: isolate;
 }
 
+.member-page .sv-main {
+  width: min(1680px, calc(100% - 96px));
+  margin-inline: auto;
+  padding-top: 1.35rem;
+  display: grid;
+  gap: 1.35rem;
+}
+
+.member-page .member-cockpit,
+.member-page .member-stats-ribbon,
+.member-page .rail-shell,
+.member-page .panel-grid,
+.member-page .section-head {
+  margin-inline: 0;
+}
+
+.member-page .member-cockpit {
+  min-height: auto;
+  padding: clamp(1.45rem, 2.4vw, 2.35rem);
+}
+
+.member-page .member-cockpit h1 {
+  font-size: clamp(2.35rem, 4.4vw, 4.4rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.member-page .member-cockpit-copy {
+  max-width: 680px;
+}
+
+.member-page .member-stats-ribbon {
+  margin-top: 0;
+  gap: 1rem;
+}
+
+.member-page .member-ribbon-card {
+  min-height: 118px;
+  padding: 1.25rem;
+}
+
+.member-page .member-section-head {
+  margin-top: 0;
+  padding-top: 0.4rem;
+}
+
+.member-page .member-rail-shell {
+  margin-top: -0.6rem;
+}
+
+.member-page .member-rail {
+  padding-block: 0.6rem 1rem;
+}
+
+.member-page .admin-overview-grid {
+  margin-top: 0;
+  gap: 1.35rem;
+}
+
+.member-page .panel-box {
+  padding: clamp(1.25rem, 2vw, 1.85rem);
+}
+
+.member-page .auth-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.member-page .auth-form p {
+  margin: 0;
+}
+
+.member-page .auth-form label {
+  margin-bottom: 0.35rem;
+  display: block;
+}
+
+.member-page .auth-form input,
+.member-page .auth-form select,
+.member-page .auth-form textarea {
+  min-height: 52px;
+}
+
+.member-page .auth-form textarea {
+  min-height: 110px;
+}
+
+.member-page .list-compact {
+  margin-top: 1rem;
+}
+
+.admin-page .sv-main {
+  width: min(1500px, calc(100% - 96px));
+  margin: 0 auto 5rem;
+  padding-top: 1.35rem;
+  display: grid;
+  gap: 1.35rem;
+}
+
+.admin-page .dash-header,
+.admin-page .quick-links,
+.admin-page .panel-box,
+.admin-page .rail-shell {
+  margin-inline: 0;
+}
+
+.admin-page .dash-header {
+  min-height: auto;
+  padding: clamp(1.45rem, 2.4vw, 2.35rem);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-page .admin-hero-copy h1 {
+  font-family: inherit;
+  font-size: clamp(2.35rem, 4vw, 4.1rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.admin-page .admin-hero-actions {
+  align-items: center;
+}
+
+.admin-page .admin-stats-grid {
+  margin-top: 0;
+  gap: 1rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-page .stat {
+  min-height: 118px;
+  padding: 1.25rem;
+}
+
+.admin-page .quick-links,
+.admin-page .panel-box {
+  padding: clamp(1.25rem, 2vw, 1.85rem);
+}
+
+.admin-page .admin-command-center {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.admin-page .admin-section-head {
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.admin-page .admin-badge-strip {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.admin-page .admin-quick-grid {
+  gap: 0.9rem;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.admin-page .quick-item {
+  min-height: 92px;
+  align-items: center;
+  border-radius: 18px;
+  padding: 1rem;
+}
+
+.admin-page .admin-overview-grid,
+.admin-page .admin-activity-grid {
+  margin-top: 0;
+  gap: 1.35rem;
+}
+
+.admin-page .catalog-health-summary {
+  gap: 1.2rem;
+}
+
+.admin-page .section-head {
+  margin-top: 0;
+}
+
+.admin-page .top10-head {
+  padding-top: 0.4rem;
+}
+
+.admin-page .admin-top-rail {
+  padding-block: 0.6rem 1rem;
+}
+
 .sv-nav-link {
   position: relative;
   color: #9ca3af;
@@ -4666,8 +4855,8 @@ body {
 .sv-fade-in,
 .reveal,
 .reveal-up {
-  opacity: 0;
-  transform: translateY(18px);
+  opacity: 1;
+  transform: translateY(0);
   transition: opacity 600ms ease, transform 600ms ease;
 }
 
@@ -4702,7 +4891,79 @@ body {
   }
 }
 
+@media (max-width: 1180px) {
+  .member-page .member-stats-ribbon {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .admin-page .admin-quick-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .admin-page .admin-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .member-page .sv-main {
+    width: min(100% - 40px, 100%);
+  }
+  .member-page .member-cockpit {
+    grid-template-columns: 1fr;
+  }
+  .member-page .member-cockpit-side {
+    grid-template-columns: 1fr;
+  }
+  .admin-page .sv-main {
+    width: min(100% - 40px, 100%);
+  }
+  .admin-page .dash-header,
+  .admin-page .admin-section-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-page .admin-badge-strip {
+    justify-content: flex-start;
+  }
+  .admin-page .admin-quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 640px) {
+  .member-page .sv-main {
+    width: min(100% - 28px, 100%);
+    gap: 1rem;
+    padding-top: 0.9rem;
+  }
+  .member-page .member-cockpit {
+    padding: 1.15rem;
+  }
+  .member-page .member-primary-actions,
+  .member-page .member-cockpit-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .member-page .member-primary-actions > *,
+  .member-page .member-cockpit-actions > * {
+    width: 100%;
+  }
+  .admin-page .sv-main {
+    width: min(100% - 28px, 100%);
+    gap: 1rem;
+    padding-top: 0.9rem;
+  }
+  .admin-page .dash-header {
+    padding: 1.15rem;
+  }
+  .admin-page .admin-hero-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-page .admin-hero-actions > * {
+    width: 100%;
+  }
   .sv-section-title {
     align-items: start;
     flex-direction: column;

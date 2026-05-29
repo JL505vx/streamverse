@@ -44,64 +44,20 @@
       </p>
 
       <div class="mt-8 flex flex-wrap items-center gap-3">
-        <a class="sv-btn-primary px-7 py-3 text-base" href="{% url 'movie_watch' movie.slug %}">&#9658; Reproducir</a>
+        <a class="inline-flex items-center justify-center rounded-full bg-[#3b82f6] px-7 py-3 text-base font-extrabold text-white shadow-lg shadow-blue-950/30 transition hover:-translate-y-0.5 hover:bg-[#2563eb]" href="{% url 'movie_watch' movie.slug %}">&#9658; Reproducir</a>
         {% if resume_seconds > 0 %}
-        <a class="sv-btn-secondary px-7 py-3 text-base" href="{% url 'movie_watch' movie.slug %}?resume=1">Continuar {{ resume_label }}</a>
+        <a class="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/10 px-7 py-3 text-base font-extrabold text-white transition hover:-translate-y-0.5 hover:border-[#3b82f6]" href="{% url 'movie_watch' movie.slug %}?resume=1">Continuar {{ resume_label }}</a>
         {% endif %}
         <form method="post" action="{% url 'toggle_favorite' movie.slug %}">
           {% csrf_token %}
-          <button type="submit" class="sv-btn-secondary px-7 py-3 text-base">
+          <button type="submit" class="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/10 px-7 py-3 text-base font-extrabold text-white transition hover:-translate-y-0.5 hover:border-[#3b82f6]">
             {% if is_favorite %}Quitar de mi lista{% else %}+ Mi lista{% endif %}
           </button>
         </form>
       </div>
-
-      <dl class="mt-10 grid max-w-2xl grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-        <div class="rounded-xl border border-white/10 bg-white/5 p-4">
-          <dt class="text-[#9ca3af]">Calidad</dt>
-          <dd class="mt-1 font-bold text-white">HLS</dd>
-        </div>
-        <div class="rounded-xl border border-white/10 bg-white/5 p-4">
-          <dt class="text-[#9ca3af]">Audio</dt>
-          <dd class="mt-1 font-bold text-white">AAC</dd>
-        </div>
-        <div class="rounded-xl border border-white/10 bg-white/5 p-4">
-          <dt class="text-[#9ca3af]">Tipo</dt>
-          <dd class="mt-1 font-bold text-white">{{ movie.get_content_type_display }}</dd>
-        </div>
-        <div class="rounded-xl border border-white/10 bg-white/5 p-4">
-          <dt class="text-[#9ca3af]">Estado</dt>
-          <dd class="mt-1 font-bold text-white">{% if movie.video_url %}Listo{% else %}Pendiente{% endif %}</dd>
-        </div>
-      </dl>
     </div>
   </div>
 </article>
-
-<section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-  <div class="mb-8">
-    <p class="text-xs font-bold uppercase tracking-[0.28em] text-[#60a5fa]">Reparto</p>
-    <h2 class="mt-2 text-3xl font-black text-white">Ficha de contenido</h2>
-  </div>
-  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-    <div class="rounded-2xl border border-white/10 bg-[#161b22] p-5 shadow-lg">
-      <p class="text-sm font-semibold text-[#9ca3af]">Genero</p>
-      <p class="mt-2 text-lg font-bold text-white">{% if movie.genre %}{{ movie.genre.name }}{% else %}Sin genero{% endif %}</p>
-    </div>
-    <div class="rounded-2xl border border-white/10 bg-[#161b22] p-5 shadow-lg">
-      <p class="text-sm font-semibold text-[#9ca3af]">Lanzamiento</p>
-      <p class="mt-2 text-lg font-bold text-white">{{ movie.release_year|default:"Pendiente" }}</p>
-    </div>
-    <div class="rounded-2xl border border-white/10 bg-[#161b22] p-5 shadow-lg">
-      <p class="text-sm font-semibold text-[#9ca3af]">Biblioteca</p>
-      <p class="mt-2 text-lg font-bold text-white">StreamVerse</p>
-    </div>
-    <div class="rounded-2xl border border-white/10 bg-[#161b22] p-5 shadow-lg">
-      <p class="text-sm font-semibold text-[#9ca3af]">Reproduccion</p>
-      <p class="mt-2 text-lg font-bold text-white">{% if resume_seconds > 0 %}En progreso{% else %}Disponible{% endif %}</p>
-    </div>
-  </div>
-</section>
 
 {% if related_movies %}
 <section class="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8" aria-labelledby="related-heading">
