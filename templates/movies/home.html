@@ -1,259 +1,230 @@
 {% extends "base.html" %}
 {% block title %}StreamVerse - Tu streaming personal{% endblock %}
 {% block body_class %}home-page{% endblock %}
-{% block scene_theme %}audience{% endblock %}
-{% block scene_mode %}premiere{% endblock %}
-{% block scene_kicker %}Private Premiere{% endblock %}
-{% block scene_title %}Tu biblioteca convertida en una experiencia de streaming libre y tuya{% endblock %}
 
 {% block content %}
-<section class="landing-hero glass reveal" data-cinema-context-step="lobby">
-  <div class="landing-copy">
-    <p class="eyebrow">Tu streaming · Tus reglas</p>
-    <h1>Tu biblioteca. Tu experiencia. Sin limites.</h1>
-    <p class="lead">Mira tus peliculas y series favoritas desde cualquier lugar, sin suscripciones que decidan por ti.</p>
+<section class="relative -mt-20 overflow-hidden">
+  <div class="absolute inset-0">
+    {% if latest_movie_card.background_style %}
+      <div class="h-full w-full bg-cover bg-center opacity-45 blur-[1px] scale-105" style="{{ latest_movie_card.background_style }}"></div>
+    {% else %}
+      <div class="h-full w-full bg-[linear-gradient(135deg,#1c1f26,#0f1117)]"></div>
+    {% endif %}
+    <div class="absolute inset-0 bg-[linear-gradient(90deg,#0f1117_0%,rgba(15,17,23,.86)_38%,rgba(15,17,23,.48)_70%,#0f1117_100%)]"></div>
+    <div class="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#0f1117] to-transparent"></div>
+  </div>
 
-    <div class="selling-points">
-      <span>Sin cuotas mensuales</span>
-      <span>Tu catalogo, tuyo</span>
-    </div>
+  <div class="relative mx-auto grid min-h-[82vh] max-w-7xl items-end gap-10 px-4 pb-16 pt-32 sm:px-6 lg:grid-cols-[1.05fr_.95fr] lg:px-8 lg:pb-24">
+    <div class="sv-fade-in max-w-3xl">
+      <p class="mb-4 text-xs font-bold uppercase tracking-[0.35em] text-[#60a5fa]">StreamVerse Original</p>
+      <h1 class="max-w-4xl text-5xl font-black leading-[0.95] tracking-tight text-white sm:text-7xl lg:text-8xl">
+        {{ latest_movie_card.title|default:"Tu biblioteca sin limites" }}
+      </h1>
+      <p class="mt-6 max-w-2xl text-base leading-8 text-[#d1d5db] sm:text-lg">
+        {{ latest_movie_card.synopsis|default:"Mira tus peliculas y series favoritas desde cualquier lugar, con una experiencia fluida y hecha para tu propio catalogo." }}
+      </p>
 
-    <div class="hero-actions landing-actions">
-      {% if user.is_authenticated %}
-        {% if user.is_staff %}
-          {% if admin_base_url %}
-            <a class="btn-primary" href="{{ admin_base_url }}/">Panel admin</a>
-            <a class="btn-ghost" href="{{ admin_base_url }}/peliculas/">Subir catalogo</a>
+      <div class="mt-6 flex flex-wrap items-center gap-3 text-sm font-semibold text-[#cbd5e1]">
+        <span class="rounded-full border border-white/10 bg-white/10 px-3 py-1">HD</span>
+        <span class="rounded-full border border-white/10 bg-white/10 px-3 py-1">Nuevo</span>
+        <span>{{ latest_movie_card.meta|default:"Catalogo personal" }}</span>
+      </div>
+
+      <div class="mt-8 flex flex-wrap gap-3">
+        {% if user.is_authenticated %}
+          {% if user.is_staff %}
+            {% if admin_base_url %}
+              <a class="sv-btn-primary px-6 py-3 text-base" href="{{ admin_base_url }}/">Panel admin</a>
+              <a class="sv-btn-secondary px-6 py-3 text-base" href="{{ admin_base_url }}/peliculas/">Subir catalogo</a>
+            {% else %}
+              <a class="sv-btn-primary px-6 py-3 text-base" href="{% url 'admin_panel' %}">Panel admin</a>
+              <a class="sv-btn-secondary px-6 py-3 text-base" href="{% url 'admin_movies' %}">Subir catalogo</a>
+            {% endif %}
           {% else %}
-            <a class="btn-primary" href="{% url 'admin_panel' %}">Panel admin</a>
-            <a class="btn-ghost" href="{% url 'admin_movies' %}">Subir catalogo</a>
+            <a class="sv-btn-primary px-6 py-3 text-base" href="{{ latest_movie_card.detail_url|default:'#explorar' }}">&#9658; Reproducir</a>
+            <a class="sv-btn-secondary px-6 py-3 text-base" href="{% url 'user_dashboard' %}">+ Mi lista</a>
           {% endif %}
         {% else %}
-          <a class="btn-primary" href="{% url 'user_dashboard' %}">Ir a mi espacio</a>
-          <a class="btn-ghost" href="#explorar">Explorar catalogo</a>
+          <a class="sv-btn-primary px-6 py-3 text-base" href="{% url 'signup' %}">Crear mi cuenta</a>
+          <a class="sv-btn-secondary px-6 py-3 text-base" href="{% url 'login' %}">Ya tengo cuenta</a>
         {% endif %}
-      {% else %}
-        <a class="btn-primary" href="{% url 'signup' %}">Crear mi cuenta</a>
-        <a class="btn-ghost" href="{% url 'login' %}">Ya tengo cuenta</a>
-      {% endif %}
+      </div>
     </div>
 
-    <form method="get" class="search-strip landing-search" role="search" aria-label="Buscar contenido">
+    <article class="sv-fade-in hidden overflow-hidden rounded-2xl border border-white/10 bg-[#1c1f26]/70 shadow-2xl shadow-black/40 backdrop-blur md:block">
+      <div class="relative aspect-[16/10] bg-[#161b22] bg-cover bg-center" {% if latest_movie_card.background_style %}style="{{ latest_movie_card.background_style }}"{% endif %}>
+        <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"></div>
+        <div class="absolute bottom-0 left-0 right-0 p-6">
+          <span class="mb-3 inline-flex rounded-full bg-[#3b82f6] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">Estreno</span>
+          <h2 class="text-3xl font-black text-white">{{ latest_movie_card.title }}</h2>
+          <p class="mt-2 line-clamp-2 text-sm leading-6 text-[#d1d5db]">{{ latest_movie_card.synopsis }}</p>
+        </div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="mx-auto -mt-10 max-w-7xl px-4 sm:px-6 lg:px-8">
+  <div class="rounded-2xl border border-white/10 bg-[#161b22]/80 p-4 shadow-xl backdrop-blur">
+    <form method="get" class="grid gap-3 md:grid-cols-[1fr_auto]" role="search" aria-label="Buscar contenido">
       <input
         type="search"
         name="q"
         value="{{ search_query }}"
         placeholder="Busca pelicula, serie, genero..."
-        class="search-input"
-        aria-label="Termino de busqueda"
+        class="h-12 rounded-xl border border-white/10 bg-[#0f1117] px-4 text-white outline-none transition placeholder:text-[#6b7280] focus:border-[#3b82f6]"
         autocomplete="off"
       >
       {% if selected_type %}<input type="hidden" name="type" value="{{ selected_type }}">{% endif %}
-      <button type="submit" class="btn-primary" aria-label="Buscar">Buscar</button>
-      {% if search_query or selected_type %}
-        <a class="btn-ghost" href="{% url 'home' %}" aria-label="Limpiar busqueda">X</a>
-      {% endif %}
+      <div class="flex gap-2">
+        <button type="submit" class="sv-btn-primary h-12 px-6">Buscar</button>
+        {% if search_query or selected_type %}
+          <a class="sv-btn-secondary h-12 px-4" href="{% url 'home' %}" aria-label="Limpiar busqueda">Limpiar</a>
+        {% endif %}
+      </div>
     </form>
-
-    <div class="filter-pills compact-pills" role="tablist" aria-label="Filtrar por tipo">
-      <a href="{% url 'home' %}{% if search_query %}?q={{ search_query|urlencode }}{% endif %}"
-         class="pill {% if not selected_type %}is-active{% endif %}"
-         role="tab" aria-selected="{% if not selected_type %}true{% else %}false{% endif %}">
-        Todo
-      </a>
-      <a href="{% url 'home' %}?type=movie{% if search_query %}&q={{ search_query|urlencode }}{% endif %}"
-         class="pill {% if selected_type == 'movie' %}is-active{% endif %}"
-         role="tab" aria-selected="{% if selected_type == 'movie' %}true{% else %}false{% endif %}">
-        Peliculas
-      </a>
-      <a href="{% url 'home' %}?type=series{% if search_query %}&q={{ search_query|urlencode }}{% endif %}"
-         class="pill {% if selected_type == 'series' %}is-active{% endif %}"
-         role="tab" aria-selected="{% if selected_type == 'series' %}true{% else %}false{% endif %}">
-        Series
-      </a>
+    <div class="mt-4 flex flex-wrap gap-2 text-sm font-semibold" role="tablist" aria-label="Filtrar por tipo">
+      <a href="{% url 'home' %}{% if search_query %}?q={{ search_query|urlencode }}{% endif %}" class="sv-pill {% if not selected_type %}is-active{% endif %}">Todo</a>
+      <a href="{% url 'home' %}?type=movie{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" class="sv-pill {% if selected_type == 'movie' %}is-active{% endif %}">Peliculas</a>
+      <a href="{% url 'home' %}?type=series{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" class="sv-pill {% if selected_type == 'series' %}is-active{% endif %}">Series</a>
     </div>
   </div>
-
-  {% if latest_movie_card.background_style %}
-  <article class="premiere-card" style="{{ latest_movie_card.background_style }}" aria-label="Contenido destacado">
-  {% else %}
-  <article class="premiere-card" aria-label="Contenido destacado">
-  {% endif %}
-    <span class="badge badge-hot" aria-label="Recien agregada">Nuevo</span>
-    <div class="premiere-copy">
-      <p class="premiere-kicker">Estreno de esta biblioteca</p>
-      <h2>{{ latest_movie_card.title }}</h2>
-      <p>{{ latest_movie_card.meta }}</p>
-      <p class="premiere-synopsis">{{ latest_movie_card.synopsis }}</p>
-      <div class="hero-actions">
-        <a class="btn-primary" href="{{ latest_movie_card.detail_url }}" aria-label="Ver {{ latest_movie_card.title }}">
-          Ver ahora
-        </a>
-        <a class="btn-ghost" href="#explorar">Explorar mas</a>
-      </div>
-    </div>
-  </article>
 </section>
 
+<div id="explorar" class="mx-auto max-w-7xl space-y-12 px-4 py-12 sm:px-6 lg:px-8">
 {% if not search_mode %}
   {% if user.is_authenticated and continue_watching %}
-  <section class="section-head reveal" aria-labelledby="continue-heading" data-cinema-context-step="billboard">
-    <div>
-      <h2 id="continue-heading">Seguir viendo</h2>
-      <p class="muted">Retoma justo donde lo dejaste.</p>
+  <section class="sv-rail-section reveal" aria-labelledby="continue-heading">
+    <div class="sv-section-title">
+      <div>
+        <p>A continuacion</p>
+        <h2 id="continue-heading">Seguir viendo</h2>
+      </div>
     </div>
-  </section>
-  <div class="rail-shell rail-shell-home" data-rail-shell>
-    <button type="button" class="rail-arrow rail-arrow-left" data-rail-prev aria-label="Anterior">&#8249;</button>
-    <div class="home-carousel" data-rail-viewport role="list" aria-label="Seguir viendo">
+    <div class="sv-rail" role="list" aria-label="Seguir viendo">
       {% for item in continue_watching %}
-      <a class="poster home-poster" href="{% url 'movie_detail' item.movie.slug %}" role="listitem" aria-label="{{ item.movie.title }}">
-        <div class="poster-image" {% if item.movie.cover_url %}style="background-image:url('{{ item.movie.cover_url }}')"{% endif %} aria-hidden="true"></div>
-        <div class="poster-meta">
+      <a class="sv-poster-card" href="{% url 'movie_detail' item.movie.slug %}" role="listitem" aria-label="{{ item.movie.title }}">
+        <span class="sv-poster-play">&#9658;</span>
+        <span class="sv-badge">Continuar</span>
+        <div class="sv-poster-image" {% if item.movie.cover_url %}style="background-image:url('{{ item.movie.cover_url }}')"{% endif %}></div>
+        <div class="sv-poster-copy">
           <strong>{{ item.movie.title }}</strong>
-          <small>Continuar desde {{ item.progress_seconds }}s</small>
+          <small>{{ item.progress_seconds }}s vistos</small>
         </div>
       </a>
       {% endfor %}
     </div>
-    <button type="button" class="rail-arrow rail-arrow-right" data-rail-next aria-label="Siguiente">&#8250;</button>
-  </div>
+  </section>
   {% endif %}
 
   {% if latest_additions %}
-  <section class="section-head reveal" id="explorar" aria-labelledby="latest-heading" data-cinema-context-step="billboard">
-    <div>
-      <h2 id="latest-heading">Lo nuevo en StreamVerse</h2>
-      <p class="muted">Solo los 4 titulos mas recientes del catalogo.</p>
+  <section class="sv-rail-section reveal" aria-labelledby="latest-heading">
+    <div class="sv-section-title">
+      <div>
+        <p>Reciente en Peliculas</p>
+        <h2 id="latest-heading">Lo nuevo en StreamVerse</h2>
+      </div>
     </div>
-  </section>
-  <div class="rail-shell rail-shell-home" data-rail-shell>
-    <button type="button" class="rail-arrow rail-arrow-left" data-rail-prev aria-label="Anterior">&#8249;</button>
-    <div class="home-carousel latest-carousel" data-rail-viewport role="list" aria-label="Novedades">
+    <div class="sv-rail" role="list" aria-label="Novedades">
       {% for movie in latest_additions %}
-      <a class="poster home-poster" href="{% url 'movie_detail' movie.slug %}" role="listitem" aria-label="{{ movie.title }}">
-        <div class="poster-image" {% if movie.cover_url %}style="background-image:url('{{ movie.cover_url }}')"{% endif %} aria-hidden="true"></div>
-        <div class="poster-meta">
-          <small class="mini-tag">Nuevo</small>
+      <a class="sv-poster-card" href="{% url 'movie_detail' movie.slug %}" role="listitem" aria-label="{{ movie.title }}">
+        <span class="sv-poster-play">&#9658;</span>
+        <span class="sv-badge">Nuevo</span>
+        <div class="sv-poster-image" {% if movie.cover_url %}style="background-image:url('{{ movie.cover_url }}')"{% endif %}></div>
+        <div class="sv-poster-copy">
           <strong>{{ movie.title }}</strong>
-          <small>{{ movie.get_content_type_display }}{% if movie.genre %} · {{ movie.genre.name }}{% endif %}</small>
+          <small>{{ movie.get_content_type_display }}{% if movie.genre %} - {{ movie.genre.name }}{% endif %}</small>
         </div>
       </a>
       {% endfor %}
     </div>
-    <button type="button" class="rail-arrow rail-arrow-right" data-rail-next aria-label="Siguiente">&#8250;</button>
-  </div>
+  </section>
   {% endif %}
 
   {% for genre_row in genre_rows %}
-  <section class="section-head reveal" aria-labelledby="genre-{{ forloop.counter }}-heading" data-cinema-context-step="billboard">
-    <div>
-      <h2 id="genre-{{ forloop.counter }}-heading">{{ genre_row.name }}</h2>
-      <p class="muted">Explora lo disponible en esta categoria.</p>
+  <section class="sv-rail-section reveal" aria-labelledby="genre-{{ forloop.counter }}-heading">
+    <div class="sv-section-title">
+      <div>
+        <p>{% if forloop.counter == 1 %}Tendencias{% else %}Reciente en Series{% endif %}</p>
+        <h2 id="genre-{{ forloop.counter }}-heading">{{ genre_row.name }}</h2>
+      </div>
     </div>
-  </section>
-  <div class="rail-shell rail-shell-home" data-rail-shell>
-    <button type="button" class="rail-arrow rail-arrow-left" data-rail-prev aria-label="Anterior">&#8249;</button>
-    <div class="home-carousel" data-rail-viewport role="list" aria-label="Categoria {{ genre_row.name }}">
+    <div class="sv-rail" role="list" aria-label="Categoria {{ genre_row.name }}">
       {% for movie in genre_row.items %}
-      <a class="poster home-poster" href="{% url 'movie_detail' movie.slug %}" role="listitem" aria-label="{{ movie.title }}">
-        <div class="poster-image" {% if movie.cover_url %}style="background-image:url('{{ movie.cover_url }}')"{% endif %} aria-hidden="true"></div>
-        <div class="poster-meta">
+      <a class="sv-poster-card" href="{% url 'movie_detail' movie.slug %}" role="listitem" aria-label="{{ movie.title }}">
+        <span class="sv-poster-play">&#9658;</span>
+        {% if movie.release_year %}<span class="sv-badge">{{ movie.release_year }}</span>{% endif %}
+        <div class="sv-poster-image" {% if movie.cover_url %}style="background-image:url('{{ movie.cover_url }}')"{% endif %}></div>
+        <div class="sv-poster-copy">
           <strong>{{ movie.title }}</strong>
-          <small>{{ movie.get_content_type_display }}{% if movie.release_year %} · {{ movie.release_year }}{% endif %}</small>
+          <small>{{ movie.get_content_type_display }}{% if movie.genre %} - {{ movie.genre.name }}{% endif %}</small>
         </div>
       </a>
       {% endfor %}
     </div>
-    <button type="button" class="rail-arrow rail-arrow-right" data-rail-next aria-label="Siguiente">&#8250;</button>
-  </div>
+  </section>
   {% endfor %}
 {% endif %}
 
 {% if search_query %}
-<section class="section-head" aria-labelledby="results-heading" data-cinema-context-step="archive">
-  <h2 id="results-heading">
-    Resultado principal para "{{ search_query }}"
-    {% if results_count is not None %}
-      <span class="chip">{{ results_count }}</span>
-    {% endif %}
-  </h2>
-</section>
+  <section class="sv-rail-section" aria-labelledby="results-heading">
+    <div class="sv-section-title">
+      <div>
+        <p>Busqueda</p>
+        <h2 id="results-heading">Resultados para "{{ search_query }}"</h2>
+      </div>
+      {% if results_count is not None %}<span class="sv-pill is-active">{{ results_count }}</span>{% endif %}
+    </div>
 
-{% if featured_search_result %}
-<article class="card" role="article" style="margin-bottom:1rem;">
-  {% if featured_search_result.cover_url %}
-  <div class="card-image" style="background-image:url('{{ featured_search_result.cover_url }}')" aria-hidden="true"></div>
-  {% else %}
-  <div class="card-image" aria-hidden="true"></div>
-  {% endif %}
-  <div class="card-content">
-    <h3>{{ featured_search_result.title }}</h3>
-    <p class="muted" style="font-size:0.84rem;margin:0 0 0.75rem;">
-      {{ featured_search_result.get_content_type_display }}
-      {% if featured_search_result.genre %} · {{ featured_search_result.genre.name }}{% endif %}
-      {% if featured_search_result.release_year %} · {{ featured_search_result.release_year }}{% endif %}
-    </p>
-    <a class="btn-primary" href="{% url 'movie_detail' featured_search_result.slug %}" style="width:max-content;">
-      Ver detalle
-    </a>
-  </div>
-</article>
-{% endif %}
-
-{% if search_related_by_genre %}
-<section class="section-head reveal" aria-labelledby="search-related-heading" data-cinema-context-step="billboard">
-  <div>
-    <h2 id="search-related-heading">Recomendadas del mismo genero</h2>
-    <p class="muted">Basadas en lo que acabas de buscar.</p>
-  </div>
-</section>
-<div class="rail-shell rail-shell-home" data-rail-shell>
-  <button type="button" class="rail-arrow rail-arrow-left" data-rail-prev aria-label="Anterior">&#8249;</button>
-  <div class="home-carousel" data-rail-viewport role="list" aria-label="Recomendadas del mismo genero">
-    {% for movie in search_related_by_genre %}
-    <a class="poster home-poster" href="{% url 'movie_detail' movie.slug %}" role="listitem" aria-label="{{ movie.title }}">
-      <div class="poster-image" {% if movie.cover_url %}style="background-image:url('{{ movie.cover_url }}')"{% endif %} aria-hidden="true"></div>
-      <div class="poster-meta">
-        <strong>{{ movie.title }}</strong>
-        <small>{{ movie.get_content_type_display }}{% if movie.genre %} · {{ movie.genre.name }}{% endif %}</small>
+    {% if featured_search_result %}
+    <a class="mb-8 grid overflow-hidden rounded-2xl border border-white/10 bg-[#1c1f26] shadow-xl transition hover:-translate-y-1 hover:border-[#3b82f6]/60 md:grid-cols-[280px_1fr]" href="{% url 'movie_detail' featured_search_result.slug %}">
+      <div class="min-h-[360px] bg-[#161b22] bg-cover bg-center" {% if featured_search_result.cover_url %}style="background-image:url('{{ featured_search_result.cover_url }}')"{% endif %}></div>
+      <div class="p-6 md:p-8">
+        <span class="sv-badge static mb-4 inline-flex">Mejor coincidencia</span>
+        <h3 class="text-4xl font-black text-white">{{ featured_search_result.title }}</h3>
+        <p class="mt-3 text-sm font-semibold text-[#9ca3af]">
+          {{ featured_search_result.get_content_type_display }}
+          {% if featured_search_result.genre %} - {{ featured_search_result.genre.name }}{% endif %}
+          {% if featured_search_result.release_year %} - {{ featured_search_result.release_year }}{% endif %}
+        </p>
+        <p class="mt-5 max-w-2xl leading-7 text-[#d1d5db]">{{ featured_search_result.synopsis|default:"Sinopsis pendiente." }}</p>
+        <span class="sv-btn-primary mt-6 inline-flex px-6 py-3">Ver detalle</span>
       </div>
     </a>
-    {% endfor %}
-  </div>
-  <button type="button" class="rail-arrow rail-arrow-right" data-rail-next aria-label="Siguiente">&#8250;</button>
-</div>
-{% endif %}
-
-{% if search_results_secondary %}
-<section class="section-head" aria-labelledby="other-results-heading" data-cinema-context-step="archive">
-  <h2 id="other-results-heading">Mas coincidencias</h2>
-</section>
-<div class="grid" role="list">
-  {% for movie in search_results_secondary %}
-  <article class="card" role="listitem">
-    {% if movie.cover_url %}
-    <div class="card-image" style="background-image:url('{{ movie.cover_url }}')" aria-hidden="true"></div>
-    {% else %}
-    <div class="card-image" aria-hidden="true"></div>
     {% endif %}
-    <div class="card-content">
-      <h3>{{ movie.title }}</h3>
-      <p class="muted" style="font-size:0.82rem;margin:0 0 0.7rem;">
-        {{ movie.get_content_type_display }}
-        {% if movie.genre %} · {{ movie.genre.name }}{% endif %}
-        {% if movie.release_year %} · {{ movie.release_year }}{% endif %}
-      </p>
-      <a class="btn-ghost" href="{% url 'movie_detail' movie.slug %}" style="width:100%;justify-content:center;">
-        Ver detalle
-      </a>
-    </div>
-  </article>
-  {% endfor %}
-</div>
-{% elif not featured_search_result %}
-<p class="muted">Sin resultados para ese filtro.</p>
-{% endif %}
-{% endif %}
 
+    {% if search_related_by_genre %}
+    <div class="sv-rail mb-10" role="list" aria-label="Recomendadas del mismo genero">
+      {% for movie in search_related_by_genre %}
+      <a class="sv-poster-card" href="{% url 'movie_detail' movie.slug %}" role="listitem" aria-label="{{ movie.title }}">
+        <span class="sv-poster-play">&#9658;</span>
+        <div class="sv-poster-image" {% if movie.cover_url %}style="background-image:url('{{ movie.cover_url }}')"{% endif %}></div>
+        <div class="sv-poster-copy">
+          <strong>{{ movie.title }}</strong>
+          <small>{{ movie.get_content_type_display }}{% if movie.genre %} - {{ movie.genre.name }}{% endif %}</small>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if search_results_secondary %}
+    <div class="sv-content-grid" role="list">
+      {% for movie in search_results_secondary %}
+      <a class="sv-poster-card" href="{% url 'movie_detail' movie.slug %}" role="listitem" aria-label="{{ movie.title }}">
+        <span class="sv-poster-play">&#9658;</span>
+        <div class="sv-poster-image" {% if movie.cover_url %}style="background-image:url('{{ movie.cover_url }}')"{% endif %}></div>
+        <div class="sv-poster-copy">
+          <strong>{{ movie.title }}</strong>
+          <small>{{ movie.get_content_type_display }}{% if movie.release_year %} - {{ movie.release_year }}{% endif %}</small>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% elif not featured_search_result %}
+      <p class="rounded-2xl border border-white/10 bg-[#161b22] p-8 text-[#9ca3af]">Sin resultados para ese filtro.</p>
+    {% endif %}
+  </section>
+{% endif %}
+</div>
 {% endblock %}

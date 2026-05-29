@@ -1,14 +1,14 @@
 {% load static %}
 <!doctype html>
-<html lang="es">
+<html lang="es" class="scroll-smooth">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#020509">
+  <meta name="theme-color" content="#0f1117">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="StreamVerse — Tu plataforma de streaming personal">
+  <meta name="description" content="StreamVerse - Tu plataforma de streaming personal">
   <title>{% block title %}StreamVerse{% endblock %}</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="{% static 'pwa/icon-192.png' %}?v=2">
@@ -16,138 +16,165 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{% static 'pwa/icon-512.png' %}?v=2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
+          colors: {
+            sv: {
+              bg: '#0f1117',
+              panel: '#161b22',
+              card: '#1c1f26',
+              text: '#e5e7eb',
+              muted: '#9ca3af',
+              accent: '#3b82f6'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="{% static 'css/main.css' %}">
   {% block extra_head %}{% endblock %}
 </head>
 <body
-  class="{% block body_class %}{% endblock %}"
-  data-scene-theme="{% block scene_theme %}audience{% endblock %}"
+  class="min-h-screen bg-[#0f1117] font-sans text-[#e5e7eb] antialiased {% block body_class %}{% endblock %}"
+  data-scene-theme="{% block scene_theme %}streaming{% endblock %}"
   data-scene-mode="{% block scene_mode %}default{% endblock %}"
-  data-cinema-context="lobby"
 >
+  <div class="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,.16),transparent_34%),linear-gradient(180deg,#0f1117_0%,#090b10_100%)]"></div>
+  <div class="pointer-events-none fixed inset-0 -z-10 bg-[linear-gradient(90deg,rgba(255,255,255,.025)_1px,transparent_1px),linear-gradient(rgba(255,255,255,.018)_1px,transparent_1px)] bg-[size:64px_64px] opacity-30"></div>
 
-  <!-- ── Scroll progress bar ──────────────────────────── -->
-  <div id="sv-scroll-bar" aria-hidden="true"></div>
+  <header
+    x-data="{ open: false }"
+    class="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#0f1117]/72 backdrop-blur-xl"
+    role="banner"
+  >
+    <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <a
+        class="text-xl font-black uppercase tracking-[0.22em] text-white transition hover:text-[#93c5fd]"
+        href="{% if app_role == 'admin' %}{% url 'admin_panel' %}{% elif app_role == 'client' or not user.is_staff %}{% url 'home' %}{% elif admin_base_url %}{{ admin_base_url }}/{% else %}{% url 'admin_panel' %}{% endif %}"
+        aria-label="StreamVerse inicio"
+      >
+        Stream<span class="text-[#3b82f6]">Verse</span>
+      </a>
 
-  <!-- ── Cinema entry flash (first-load dark curtain) ── -->
-  <div class="sv-entry-overlay" aria-hidden="true"></div>
-
-  <!-- ── Ambient light blobs ─────────────────────────── -->
-  <div class="sv-ambient sv-ambient--a" aria-hidden="true"></div>
-  <div class="sv-ambient sv-ambient--b" aria-hidden="true"></div>
-  <div class="sv-ambient sv-ambient--c" aria-hidden="true"></div>
-
-  <!-- ── Three.js cinema stage ───────────────────────── -->
-  <div class="cinema-stage" aria-hidden="true">
-    <canvas id="cinema-scene"></canvas>
-    <div class="cinema-glow cinema-glow-left"></div>
-    <div class="cinema-glow cinema-glow-right"></div>
-    <div class="cinema-copy">
-      <span class="cinema-kicker">{% block scene_kicker %}Cinema At Home{% endblock %}</span>
-      <strong>{% block scene_title %}Snacks, lights and screen time{% endblock %}</strong>
-    </div>
-  </div>
-
-  <!-- ── Canvas 2D floating objects ──────────────────── -->
-  <canvas id="cinema-bg" aria-hidden="true"></canvas>
-
-  <!-- ── Scanline overlay ─────────────────────────────── -->
-  <div class="bg-overlay" aria-hidden="true"></div>
-
-  <!-- ── Topbar ───────────────────────────────────────── -->
-  <header class="topbar glass" role="banner">
-    <a class="brand"
-       href="{% if app_role == 'admin' %}{% url 'admin_panel' %}{% elif app_role == 'client' or not user.is_staff %}{% url 'home' %}{% elif admin_base_url %}{{ admin_base_url }}/{% else %}{% url 'admin_panel' %}{% endif %}"
-       aria-label="StreamVerse — Inicio">
-      StreamVerse
-    </a>
-
-    <nav class="nav-links" aria-label="Navegación principal">
-      {% if user.is_authenticated %}
-        {% if user.is_staff %}
-          <span class="chip">{{ user.username }}</span>
-          <a href="{% if admin_base_url and app_role == 'client' %}{{ admin_base_url }}/{% else %}{% url 'admin_panel' %}{% endif %}">Panel</a>
-          <a href="{% url 'home' %}" class="admin-switch">Vista pública</a>
+      <nav class="hidden items-center gap-7 text-sm font-semibold text-[#9ca3af] lg:flex" aria-label="Navegacion principal">
+        {% if app_role != 'admin' %}
+          <a class="sv-nav-link" href="{% url 'home' %}">Inicio</a>
+          <a class="sv-nav-link" href="{% url 'home' %}?type=movie">Peliculas</a>
+          <a class="sv-nav-link" href="{% url 'home' %}?type=series">Series</a>
+          {% if user.is_authenticated and not user.is_staff %}
+            <a class="sv-nav-link" href="{% url 'user_dashboard' %}">Mi lista</a>
+          {% endif %}
         {% else %}
-          <a href="{% url 'user_dashboard' %}">Mi espacio</a>
-          <a href="{% url 'user_settings' %}">Ajustes</a>
+          <a class="sv-nav-link" href="{% url 'admin_panel' %}">Panel</a>
+          <a class="sv-nav-link" href="{% url 'admin_movies' %}">Catalogo</a>
+          <a class="sv-nav-link" href="{% url 'admin_users' %}">Usuarios</a>
         {% endif %}
-        <form method="post" action="{% if app_role == 'client' %}{% url 'logout' %}{% elif user.is_staff %}{% url 'admin_logout' %}{% else %}{% url 'logout' %}{% endif %}" class="logout-form">
-          {% csrf_token %}
-          <input type="hidden" name="auth_scope" value="{% if user.is_staff %}admin{% else %}user{% endif %}">
-          <button type="submit" class="btn-mini">Salir</button>
+      </nav>
+
+      <div class="hidden items-center gap-3 lg:flex">
+        {% if app_role != 'admin' %}
+        <form method="get" action="{% url 'home' %}" class="relative">
+          <input
+            type="search"
+            name="q"
+            value="{{ search_query|default:'' }}"
+            placeholder="Buscar"
+            class="h-10 w-48 rounded-full border border-white/10 bg-white/5 px-4 pr-10 text-sm text-white outline-none transition placeholder:text-[#6b7280] focus:w-64 focus:border-[#3b82f6] focus:bg-white/10"
+            autocomplete="off"
+          >
+          <button class="absolute right-3 top-1/2 -translate-y-1/2 text-[#9ca3af] transition hover:text-white" aria-label="Buscar" type="submit">
+            <span aria-hidden="true">&#8981;</span>
+          </button>
         </form>
-      {% else %}
-        <a href="{% url 'home' %}">Inicio</a>
-        <a href="{% url 'login' %}">Entrar</a>
-        {% if app_role == 'client' and admin_base_url %}
-          <a href="{{ admin_base_url }}/login/" class="admin-switch">Acceso admin</a>
-        {% elif app_role != 'client' %}
-          <a href="{% url 'admin_login' %}" class="admin-switch">Acceso admin</a>
         {% endif %}
-        {% if app_role != 'admin' %}<a class="btn-mini" href="{% url 'signup' %}">Registro</a>{% endif %}
-      {% endif %}
-    </nav>
+
+        {% if user.is_authenticated %}
+          <div class="flex h-10 w-10 items-center justify-center rounded-full bg-[#3b82f6] text-sm font-bold text-white shadow-lg shadow-blue-950/30">
+            {{ user.username|slice:":1"|upper }}
+          </div>
+          <form method="post" action="{% if app_role == 'client' %}{% url 'logout' %}{% elif user.is_staff %}{% url 'admin_logout' %}{% else %}{% url 'logout' %}{% endif %}">
+            {% csrf_token %}
+            <input type="hidden" name="auth_scope" value="{% if user.is_staff %}admin{% else %}user{% endif %}">
+            <button type="submit" class="sv-btn-secondary px-4 py-2 text-sm">Salir</button>
+          </form>
+        {% else %}
+          <a class="sv-nav-link" href="{% url 'login' %}">Entrar</a>
+          {% if app_role == 'client' and admin_base_url %}
+            <a class="sv-nav-link text-[#60a5fa]" href="{{ admin_base_url }}/login/">Acceso admin</a>
+          {% elif app_role != 'client' %}
+            <a class="sv-nav-link text-[#60a5fa]" href="{% url 'admin_login' %}">Acceso admin</a>
+          {% endif %}
+          {% if app_role != 'admin' %}<a class="sv-btn-primary px-5 py-2 text-sm" href="{% url 'signup' %}">Registro</a>{% endif %}
+        {% endif %}
+      </div>
+
+      <button
+        class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white lg:hidden"
+        type="button"
+        x-on:click="open = !open"
+        aria-label="Abrir menu"
+      >
+        <span class="text-2xl leading-none" x-text="open ? 'x' : '='"></span>
+      </button>
+    </div>
+
+    <div x-cloak x-show="open" x-transition class="border-t border-white/10 bg-[#0f1117]/95 px-4 py-4 backdrop-blur-xl lg:hidden">
+      <nav class="grid gap-2 text-sm font-semibold text-[#e5e7eb]" aria-label="Menu movil">
+        {% if app_role != 'admin' %}
+          <a class="sv-mobile-link" href="{% url 'home' %}">Inicio</a>
+          <a class="sv-mobile-link" href="{% url 'home' %}?type=movie">Peliculas</a>
+          <a class="sv-mobile-link" href="{% url 'home' %}?type=series">Series</a>
+          {% if user.is_authenticated and not user.is_staff %}
+            <a class="sv-mobile-link" href="{% url 'user_dashboard' %}">Mi lista</a>
+            <a class="sv-mobile-link" href="{% url 'user_settings' %}">Perfil</a>
+          {% endif %}
+        {% else %}
+          <a class="sv-mobile-link" href="{% url 'admin_panel' %}">Panel</a>
+          <a class="sv-mobile-link" href="{% url 'admin_movies' %}">Catalogo</a>
+          <a class="sv-mobile-link" href="{% url 'admin_users' %}">Usuarios</a>
+        {% endif %}
+        {% if user.is_authenticated %}
+          <form method="post" action="{% if app_role == 'client' %}{% url 'logout' %}{% elif user.is_staff %}{% url 'admin_logout' %}{% else %}{% url 'logout' %}{% endif %}" class="pt-2">
+            {% csrf_token %}
+            <input type="hidden" name="auth_scope" value="{% if user.is_staff %}admin{% else %}user{% endif %}">
+            <button type="submit" class="sv-btn-secondary w-full px-4 py-3">Salir</button>
+          </form>
+        {% else %}
+          <a class="sv-mobile-link" href="{% url 'login' %}">Entrar</a>
+          {% if app_role != 'admin' %}<a class="sv-btn-primary mt-2 px-4 py-3 text-center" href="{% url 'signup' %}">Registro</a>{% endif %}
+        {% endif %}
+      </nav>
+    </div>
   </header>
 
-  <!-- ── Main content ─────────────────────────────────── -->
-  <main class="container" id="main-content">
+  <main id="main-content" class="sv-main min-h-screen pt-20">
     {% if messages %}
-      <div class="flash-wrap" role="alert" aria-live="polite">
+      <div class="mx-auto mb-6 max-w-7xl px-4 sm:px-6 lg:px-8" role="alert" aria-live="polite">
       {% for message in messages %}
-        <div class="flash flash-{{ message.tags|default:'info' }}">{{ message }}</div>
+        <div class="rounded-xl border border-white/10 bg-[#161b22]/90 px-4 py-3 text-sm text-[#e5e7eb] shadow-lg">{{ message }}</div>
       {% endfor %}
       </div>
     {% endif %}
     {% block content %}{% endblock %}
   </main>
 
-  <!-- ── Mobile bottom dock ───────────────────────────── -->
-  {% if user.is_authenticated and not user.is_staff %}
-  <nav class="mobile-dock" aria-label="Navegación rápida">
-
-    <a href="{% url 'home' %}" class="mobile-dock-link" aria-label="Inicio">
-      <span class="mobile-dock-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><polyline points="9,21 9,12 15,12 15,21"/></svg>
-      </span>
-      <small>Inicio</small>
-    </a>
-
-    <a href="{% url 'user_dashboard' %}" class="mobile-dock-link" aria-label="Mi espacio">
-      <span class="mobile-dock-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-      </span>
-      <small>Mi espacio</small>
-    </a>
-
-    <a href="{% url 'user_settings' %}" class="mobile-dock-link" aria-label="Ajustes">
-      <span class="mobile-dock-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-      </span>
-      <small>Perfil</small>
-    </a>
-
-    <form method="post" action="{% url 'logout' %}" class="mobile-dock-link mobile-dock-form">
-      {% csrf_token %}
-      <input type="hidden" name="auth_scope" value="user">
-      <button type="submit" class="mobile-dock-button" aria-label="Cerrar sesión">
-        <span class="mobile-dock-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        </span>
-        <small>Salir</small>
-      </button>
-    </form>
-
+  {% if user.is_authenticated and not user.is_staff and app_role != 'admin' %}
+  <nav class="fixed inset-x-4 bottom-4 z-40 grid grid-cols-3 rounded-2xl border border-white/10 bg-[#161b22]/90 p-2 text-center text-xs font-semibold text-[#9ca3af] shadow-2xl backdrop-blur-xl lg:hidden" aria-label="Navegacion rapida">
+    <a class="rounded-xl px-3 py-2 transition hover:bg-white/10 hover:text-white" href="{% url 'home' %}">Inicio</a>
+    <a class="rounded-xl px-3 py-2 transition hover:bg-white/10 hover:text-white" href="{% url 'user_dashboard' %}">Mi lista</a>
+    <a class="rounded-xl px-3 py-2 transition hover:bg-white/10 hover:text-white" href="{% url 'user_settings' %}">Perfil</a>
   </nav>
   {% endif %}
 
-  <!-- ── Scripts ──────────────────────────────────────── -->
-  <script type="module" src="{% static 'js/cinema-scene.js' %}"></script>
-  <script src="{% static 'js/cinema-bg.js' %}"></script>
   <script src="{% static 'js/rail-carousel.js' %}"></script>
   <script src="{% static 'js/sv-effects.js' %}"></script>
-
   <script>
   (function(){
     if(!('serviceWorker' in navigator)) return;
@@ -158,20 +185,20 @@
     });
   })();
   </script>
-
-  <!-- Scroll reveal (base) -->
   <script>
   (function(){
     if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const io = new IntersectionObserver(function(entries){
-      entries.forEach(function(e){
-        if(e.isIntersecting){ e.target.classList.add('is-visible'); io.unobserve(e.target); }
+      entries.forEach(function(entry){
+        if(entry.isIntersecting){
+          entry.target.classList.add('is-visible');
+          io.unobserve(entry.target);
+        }
       });
-    }, { threshold: 0.07 });
-    document.querySelectorAll('.reveal,.reveal-up').forEach(function(el){ io.observe(el); });
+    }, { threshold: 0.08 });
+    document.querySelectorAll('.reveal,.reveal-up,.sv-fade-in').forEach(function(el){ io.observe(el); });
   })();
   </script>
-
   {% block extra_scripts %}{% endblock %}
 </body>
 </html>

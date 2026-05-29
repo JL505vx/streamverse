@@ -1,76 +1,129 @@
 {% extends "base.html" %}
-{% block title %}{{ movie.title }} · Ficha cinematográfica{% endblock %}
+{% block title %}{{ movie.title }} - StreamVerse{% endblock %}
 {% block body_class %}movie-presentation-page{% endblock %}
-{% block scene_theme %}projector{% endblock %}
-{% block scene_mode %}detail{% endblock %}
-{% block scene_kicker %}Cinematic Presentation{% endblock %}
-{% block scene_title %}{{ movie.title }}{% endblock %}
 
 {% block content %}
-<article class="movie-presentation glass reveal" data-cinema-context-step="screening">
-  <div class="movie-presentation-media">
+<article class="relative -mt-20 overflow-hidden">
+  <div class="absolute inset-0">
     {% if movie.cover_url %}
-      <img src="{{ movie.cover_url }}" alt="Portada de {{ movie.title }}" loading="eager">
+      <div class="h-full w-full scale-110 bg-cover bg-center opacity-30 blur-2xl" style="background-image:url('{{ movie.cover_url }}')"></div>
     {% else %}
-      <div class="movie-presentation-fallback" aria-hidden="true">{{ movie.title|slice:":1" }}</div>
+      <div class="h-full w-full bg-[#161b22]"></div>
     {% endif %}
-    <div class="movie-presentation-glow" aria-hidden="true"></div>
+    <div class="absolute inset-0 bg-[linear-gradient(90deg,#0f1117_0%,rgba(15,17,23,.9)_42%,rgba(15,17,23,.68)_100%)]"></div>
+    <div class="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#0f1117] to-transparent"></div>
   </div>
 
-  <div class="movie-presentation-copy">
-    <p class="eyebrow">Pantalla principal</p>
-    <h1 class="sv-title-reveal">{{ movie.title }}</h1>
-    <p class="movie-presentation-meta">
-      {{ movie.get_content_type_display }}{% if movie.genre %} · {{ movie.genre.name }}{% endif %}{% if movie.release_year %} · {{ movie.release_year }}{% endif %}
-    </p>
-    <p class="movie-presentation-synopsis">
-      {{ movie.synopsis|default:"Sinopsis pendiente. Puedes reproducir y completar los detalles después." }}
-    </p>
-
-    <div class="movie-presentation-actions">
-      <a class="btn-primary" href="{% url 'movie_watch' movie.slug %}">
-        Entrar a sala de cine
-      </a>
-      {% if resume_seconds > 0 %}
-      <a class="btn-ghost" href="{% url 'movie_watch' movie.slug %}?resume=1">
-        Continuar desde {{ resume_label }}
-      </a>
-      {% endif %}
-      <form method="post" action="{% url 'toggle_favorite' movie.slug %}">
-        {% csrf_token %}
-        <button type="submit" class="btn-ghost">
-          {% if is_favorite %}Quitar de mi lista{% else %}+ Mi lista{% endif %}
-        </button>
-      </form>
+  <div class="relative mx-auto grid min-h-[86vh] max-w-7xl items-end gap-10 px-4 pb-16 pt-32 sm:px-6 lg:grid-cols-[340px_1fr] lg:px-8 lg:pb-24">
+    <div class="sv-fade-in">
+      <div class="relative mx-auto aspect-[2/3] max-w-[320px] overflow-hidden rounded-2xl border border-white/10 bg-[#1c1f26] shadow-2xl shadow-black/50 lg:mx-0">
+        {% if movie.cover_url %}
+          <img src="{{ movie.cover_url }}" alt="Portada de {{ movie.title }}" class="h-full w-full object-cover" loading="eager">
+        {% else %}
+          <div class="flex h-full w-full items-center justify-center bg-[#1c1f26] text-7xl font-black text-[#3b82f6]">{{ movie.title|slice:":1" }}</div>
+        {% endif %}
+        <div class="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent"></div>
+        <span class="absolute left-4 top-4 rounded-full bg-[#3b82f6] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">HD</span>
+      </div>
     </div>
 
-    <div class="movie-presentation-note">
-      <p>Primero eliges cómo ver, luego entras a reproducción inmersiva con cuenta regresiva y control de sala.</p>
+    <div class="sv-fade-in max-w-4xl">
+      <p class="mb-4 text-xs font-bold uppercase tracking-[0.35em] text-[#60a5fa]">Ahora en StreamVerse</p>
+      <h1 class="text-5xl font-black leading-none tracking-tight text-white sm:text-7xl">{{ movie.title }}</h1>
+
+      <div class="mt-5 flex flex-wrap items-center gap-3 text-sm font-semibold text-[#d1d5db]">
+        <span class="rounded-full border border-white/10 bg-white/10 px-3 py-1">{{ movie.get_content_type_display }}</span>
+        {% if movie.genre %}<span>{{ movie.genre.name }}</span>{% endif %}
+        {% if movie.release_year %}<span>{{ movie.release_year }}</span>{% endif %}
+        <span class="text-[#facc15]">★ 4.8</span>
+        <span>Full HD</span>
+      </div>
+
+      <p class="mt-7 max-w-3xl text-base leading-8 text-[#d1d5db] sm:text-lg">
+        {{ movie.synopsis|default:"Sinopsis pendiente. Puedes reproducir y completar los detalles despues." }}
+      </p>
+
+      <div class="mt-8 flex flex-wrap items-center gap-3">
+        <a class="sv-btn-primary px-7 py-3 text-base" href="{% url 'movie_watch' movie.slug %}">&#9658; Reproducir</a>
+        {% if resume_seconds > 0 %}
+        <a class="sv-btn-secondary px-7 py-3 text-base" href="{% url 'movie_watch' movie.slug %}?resume=1">Continuar {{ resume_label }}</a>
+        {% endif %}
+        <form method="post" action="{% url 'toggle_favorite' movie.slug %}">
+          {% csrf_token %}
+          <button type="submit" class="sv-btn-secondary px-7 py-3 text-base">
+            {% if is_favorite %}Quitar de mi lista{% else %}+ Mi lista{% endif %}
+          </button>
+        </form>
+      </div>
+
+      <dl class="mt-10 grid max-w-2xl grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+        <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+          <dt class="text-[#9ca3af]">Calidad</dt>
+          <dd class="mt-1 font-bold text-white">HLS</dd>
+        </div>
+        <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+          <dt class="text-[#9ca3af]">Audio</dt>
+          <dd class="mt-1 font-bold text-white">AAC</dd>
+        </div>
+        <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+          <dt class="text-[#9ca3af]">Tipo</dt>
+          <dd class="mt-1 font-bold text-white">{{ movie.get_content_type_display }}</dd>
+        </div>
+        <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+          <dt class="text-[#9ca3af]">Estado</dt>
+          <dd class="mt-1 font-bold text-white">{% if movie.video_url %}Listo{% else %}Pendiente{% endif %}</dd>
+        </div>
+      </dl>
     </div>
   </div>
 </article>
 
-{% if related_movies %}
-<section class="section-head reveal" aria-labelledby="related-heading" data-cinema-context-step="billboard">
-  <div>
-    <h2 id="related-heading">Más del mismo género</h2>
-    <p class="muted">Explora otras opciones antes de comenzar.</p>
+<section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+  <div class="mb-8">
+    <p class="text-xs font-bold uppercase tracking-[0.28em] text-[#60a5fa]">Reparto</p>
+    <h2 class="mt-2 text-3xl font-black text-white">Ficha de contenido</h2>
+  </div>
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="rounded-2xl border border-white/10 bg-[#161b22] p-5 shadow-lg">
+      <p class="text-sm font-semibold text-[#9ca3af]">Genero</p>
+      <p class="mt-2 text-lg font-bold text-white">{% if movie.genre %}{{ movie.genre.name }}{% else %}Sin genero{% endif %}</p>
+    </div>
+    <div class="rounded-2xl border border-white/10 bg-[#161b22] p-5 shadow-lg">
+      <p class="text-sm font-semibold text-[#9ca3af]">Lanzamiento</p>
+      <p class="mt-2 text-lg font-bold text-white">{{ movie.release_year|default:"Pendiente" }}</p>
+    </div>
+    <div class="rounded-2xl border border-white/10 bg-[#161b22] p-5 shadow-lg">
+      <p class="text-sm font-semibold text-[#9ca3af]">Biblioteca</p>
+      <p class="mt-2 text-lg font-bold text-white">StreamVerse</p>
+    </div>
+    <div class="rounded-2xl border border-white/10 bg-[#161b22] p-5 shadow-lg">
+      <p class="text-sm font-semibold text-[#9ca3af]">Reproduccion</p>
+      <p class="mt-2 text-lg font-bold text-white">{% if resume_seconds > 0 %}En progreso{% else %}Disponible{% endif %}</p>
+    </div>
   </div>
 </section>
-<div class="rail-shell rail-shell-home" data-rail-shell>
-  <button type="button" class="rail-arrow rail-arrow-left" data-rail-prev aria-label="Anterior">&#8249;</button>
-  <div class="home-carousel" data-rail-viewport role="list" aria-label="Películas relacionadas">
+
+{% if related_movies %}
+<section class="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8" aria-labelledby="related-heading">
+  <div class="sv-section-title">
+    <div>
+      <p>Tambien te puede gustar</p>
+      <h2 id="related-heading">Mas del mismo genero</h2>
+    </div>
+  </div>
+  <div class="sv-rail" role="list" aria-label="Peliculas relacionadas">
     {% for related in related_movies %}
-      <a class="poster home-poster" href="{% url 'movie_detail' related.slug %}" role="listitem" aria-label="{{ related.title }}">
-        <div class="poster-image" {% if related.cover_url %}style="background-image:url('{{ related.cover_url }}')"{% endif %} aria-hidden="true"></div>
-        <div class="poster-meta">
+      <a class="sv-poster-card" href="{% url 'movie_detail' related.slug %}" role="listitem" aria-label="{{ related.title }}">
+        <span class="sv-poster-play">&#9658;</span>
+        {% if related.release_year %}<span class="sv-badge">{{ related.release_year }}</span>{% endif %}
+        <div class="sv-poster-image" {% if related.cover_url %}style="background-image:url('{{ related.cover_url }}')"{% endif %}></div>
+        <div class="sv-poster-copy">
           <strong>{{ related.title }}</strong>
-          <small>{{ related.get_content_type_display }}{% if related.release_year %} · {{ related.release_year }}{% endif %}</small>
+          <small>{{ related.get_content_type_display }}{% if related.release_year %} - {{ related.release_year }}{% endif %}</small>
         </div>
       </a>
     {% endfor %}
   </div>
-  <button type="button" class="rail-arrow rail-arrow-right" data-rail-next aria-label="Siguiente">&#8250;</button>
-</div>
+</section>
 {% endif %}
 {% endblock %}
